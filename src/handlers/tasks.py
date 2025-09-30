@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import aiosqlite
 
@@ -14,6 +14,27 @@ from scheduler_jobs import schedule_task_jobs
 
 router = Router()
 
+# -------------------------------
+# Функция удаления старых задач
+# -------------------------------
+async def delete_old_tasks():
+    """Удаляет задачи, у которых дедлайн прошел более 168 часов назад."""
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=168)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        # Получаем удаляемые задачи для логирования (опционально)
+        old_tasks = await db.execute_fetchall(
+            "SELECT id, title FROM tasks WHERE due_utc <= ?", (cutoff_time.isoformat(),)
+        )
+        # Удаляем старые задачи
+        await db.execute("DELETE FROM tasks WHERE due_utc <= ?", (cutoff_time.isoformat(),))
+        await db.commit()
+    if old_tasks:
+        print(f"Удалены старые задачи: {[t['title'] for t in old_tasks]}")
+
+# -------------------------------
+# Добавление нового задания
+# -------------------------------
 @router.callback_query(F.data == CB_ADD_TASK)
 async def cb_add_task(cq: CallbackQuery):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -62,8 +83,14 @@ async def cb_add_task_pick_class(cq: CallbackQuery):
         reply_markup=back_kb()
     )
 
+# -------------------------------
+# Просмотр списка заданий
+# -------------------------------
 @router.callback_query(F.data == CB_LIST_TASKS)
 async def cb_list_tasks(cq: CallbackQuery):
+    # ✅ Удаляем старые задачи перед показом списка
+    await delete_old_tasks()
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         rows = await fetchall(
