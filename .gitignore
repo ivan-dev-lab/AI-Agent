@@ -1,3 +1,4 @@
 src/.idea/.gitignore
 src/__pycache__
 src/handlers/__pycache__
+venv
