@@ -1,0 +1,7 @@
+aiogram==3.22.0
+aiosqlite==0.21.0
+APScheduler==3.6.3
+langchain_community==0.3.30
+langchain_core==0.3.76
+python-dotenv==1.1.1
+pytz==2024.2
