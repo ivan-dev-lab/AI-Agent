@@ -81,6 +81,11 @@ async def rehydrate_jobs():
         )
 
 async def send_reminder_job(task_id: int, when_label: str):
+    """
+    Напоминание по задаче.
+    В НОВОЙ СХЕМЕ БД нет таблицы students и нет chat_id у пользователей,
+    поэтому шлём уведомление только владельцу класса (owner_chat_id).
+    """
     if BOT is None:
         return
     async with aiosqlite.connect(DB_PATH) as db:
@@ -97,14 +102,6 @@ async def send_reminder_job(task_id: int, when_label: str):
         due_local_str = fmt_dt_local(due_utc, tz)
         teacher_chat = class_row["owner_chat_id"]
 
-        students = await fetchall(
-            db,
-            """SELECT s.name, s.chat_id FROM students s
-               JOIN enrollments e ON e.student_id = s.id
-               WHERE e.class_id = ?""",
-            (class_row["id"],)
-        )
-
     header = (
         f"⏰ Напоминание ({when_label})\n"
         f"Класс: <b>{class_row['name']}</b>\n"
@@ -119,20 +116,9 @@ async def send_reminder_job(task_id: int, when_label: str):
         "• Сдайте отчёт по формату"
     )
 
-    missing = []
-    for s in students:
-        if s["chat_id"]:
-            try:
-                await BOT.send_message(chat_id=int(s["chat_id"]), text=header + body, parse_mode=ParseMode.HTML)
-            except Exception:
-                missing.append(s["name"])
-        else:
-            missing.append(s["name"])
-
-    final_body = body
-    if missing:
-        final_body += "\n\n⚠️ Не зарегистрированы: " + ", ".join(missing)
+    # Отправляем ТОЛЬКО преподавателю
     try:
-        await BOT.send_message(chat_id=int(teacher_chat), text=header + final_body, parse_mode=ParseMode.HTML)
+        await BOT.send_message(chat_id=int(teacher_chat), text=header + body, parse_mode=ParseMode.HTML)
     except Exception:
+        # гасим любые ошибки отправки, чтобы планировщик не падал
         pass

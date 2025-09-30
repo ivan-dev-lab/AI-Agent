@@ -1,27 +1,54 @@
+# src/handlers/enroll.py
 # -*- coding: utf-8 -*-
+import aiosqlite
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
-import aiosqlite
 
 from config import DB_PATH
-from db import fetchall, fetchone
+from db import fetchone, fetchall
 from keyboards import back_kb, single_col_kb
 from callbacks import (
-    CB_ENROLL, CB_ENROLL_PICK_STU, CB_ENROLL_PICK_CLS, CB_STU_AFTER_ADD_SKIP
+    CB_ENROLL,
+    CB_ENROLL_PICK_STU,
+    CB_ENROLL_PICK_CLS,
+    CB_STU_AFTER_ADD_SKIP,
 )
-from utils import display_student
 
 router = Router()
 
+
+def _title(row) -> str:
+    """Отображаем имя ученика или его UserID."""
+    try:
+        name = row["name"]
+    except Exception:
+        name = None
+    if name:
+        return name
+    try:
+        uid = row["UserID"]
+    except Exception:
+        uid = None
+    return f"UserID {uid}" if uid is not None else "Неизвестный ученик"
+
+
 @router.callback_query(F.data == CB_ENROLL)
 async def cb_enroll(cq: CallbackQuery):
+    # Берём только студентов; если используете active=1 — раскомментируйте соответствующее условие
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        students = await fetchall(db, "SELECT id, name, username FROM students ORDER BY name COLLATE NOCASE ASC")
+        students = await fetchall(
+            db,
+            # добавьте 'AND active = 1' если нужно
+            "SELECT UserID, name FROM users WHERE post = 'student' ORDER BY name COLLATE NOCASE ASC"
+        )
+
     if not students:
         return await cq.message.edit_text("Пока нет учеников.", reply_markup=back_kb())
-    rows = [(display_student(s["name"], s["username"]), f"{CB_ENROLL_PICK_STU}{s['id']}") for s in students]
+
+    rows = [(_title(s), f"{CB_ENROLL_PICK_STU}{s['UserID']}") for s in students]
     await cq.message.edit_text("🔗 <b>Выберите ученика</b>:", reply_markup=single_col_kb(rows))
+
 
 @router.callback_query(F.data.startswith(CB_ENROLL_PICK_STU))
 async def cb_enroll_pick_student(cq: CallbackQuery):
@@ -32,20 +59,21 @@ async def cb_enroll_pick_student(cq: CallbackQuery):
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        s = await fetchone(db, "SELECT name, username FROM students WHERE id=?", (student_id,))
+        s = await fetchone(db, "SELECT UserID, name FROM users WHERE UserID=?", (student_id,))
         classes = await fetchall(db, "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC")
+
     if not s:
         return await cq.answer("Ученик не найден", show_alert=True)
     if not classes:
         return await cq.message.edit_text("Пока нет классов. Сначала создайте класс.", reply_markup=back_kb())
 
-    student_title = display_student(s["name"], s["username"])
-    rows = [(c['name'], f"{CB_ENROLL_PICK_CLS}{student_id}:{c['id']}") for c in classes]
+    rows = [(c["name"], f"{CB_ENROLL_PICK_CLS}{student_id}:{c['id']}") for c in classes]
     rows.append(("⏭ Пропустить", CB_STU_AFTER_ADD_SKIP))
     await cq.message.edit_text(
-        f"🔗 Ученик: <b>{student_title}</b>\n\nВыберите <b>класс</b>:",
+        f"🔗 Ученик: <b>{_title(s)}</b>\n\nВыберите <b>класс</b>:",
         reply_markup=single_col_kb(rows)
     )
+
 
 @router.callback_query(F.data.startswith(CB_ENROLL_PICK_CLS))
 async def cb_enroll_pick_class(cq: CallbackQuery):
@@ -59,21 +87,23 @@ async def cb_enroll_pick_class(cq: CallbackQuery):
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        s = await fetchone(db, "SELECT name, username FROM students WHERE id=?", (student_id,))
-        c = await fetchone(db, "SELECT name FROM classes WHERE id=?", (class_id,))
-
+        s = await fetchone(db, "SELECT UserID, name FROM users WHERE UserID=?", (student_id,))
+        c = await fetchone(db, "SELECT id, name FROM classes WHERE id=?", (class_id,))
         if not s or not c:
             return await cq.answer("Ученик или класс не найден", show_alert=True)
-
         try:
-            await db.execute("INSERT OR IGNORE INTO enrollments(student_id, class_id) VALUES(?, ?)", (student_id, class_id))
+            # enrollments.student_id = users.UserID
+            await db.execute(
+                "INSERT OR IGNORE INTO enrollments(student_id, class_id) VALUES(?, ?)",
+                (student_id, class_id)
+            )
             await db.commit()
         except Exception as e:
             return await cq.message.edit_text(f"Ошибка: {e}", reply_markup=back_kb())
 
     await cq.message.edit_text(
         f"✅ Привязка выполнена:\n"
-        f"Ученик: <b>{display_student(s['name'], s['username'])}</b>\n"
+        f"Ученик: <b>{_title(s)}</b>\n"
         f"Класс: <b>{c['name']}</b>",
         reply_markup=back_kb()
     )

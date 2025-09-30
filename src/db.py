@@ -56,13 +56,13 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 -- Пользователи
 -- ВАЖНО: UserID — PRIMARY KEY, НО БЕЗ AUTOINCREMENT (как просили)
-CREATE TABLE IF NOT EXISTS users (
-  UserID    INTEGER PRIMARY KEY,  -- без AUTOINCREMENT
-  name      TEXT,
-  surname   TEXT,
-  patronymic TEXT,                -- строковый тип
-  post      TEXT NOT NULL
-);
+CREATE TABLE IF NOT EXISTS "users" (
+	"UserID"	INTEGER,
+	"name"	TEXT,
+	"post"	TEXT NOT NULL,
+	"active"	INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY("UserID")
+);;
 
 -- Индексы (по желанию, ускоряют выборки)
 CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments(student_id);

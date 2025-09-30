@@ -1,22 +1,36 @@
+# handlers/text.py
 # -*- coding: utf-8 -*-
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import aiosqlite
+import random
 
 from aiogram import Router, F
 from aiogram.types import Message
 
 from config import DB_PATH, DEFAULT_TZ
-from db import fetchone
-from keyboards import back_kb
-from utils import parse_utc_hhmm, fmt_dt_local
+from db import fetchone, fetchall
+from keyboards import back_kb, single_col_kb
+from utils import fmt_dt_local
 from scheduler_jobs import schedule_task_jobs
+from callbacks import (
+    CB_STU_AFTER_ADD_SKIP,
+    CB_ENROLL_PICK_CLS,
+)
 
-# shared in-memory state (простой FSM)
-USER_STATE = {}     # {user_id: {"mode": str, "step": int, "data": dict, "chat_id": int}}
-USER_MODEL = {}     # если захочешь на пользователя разные модели генерации
+# простой in-memory FSM, как и было в проекте
+USER_STATE = {}   # {user_id: {"mode": str, "step": int, "data": dict, "chat_id": int}}
 
 router = Router()
+
+
+def _gen_user_id() -> int:
+    """
+    В текущей схеме users.UserID НЕ автоинкремент.
+    Сгенерируем положительный id. На проде лучше выделить генератор/последовательность.
+    """
+    return random.randint(10_000, 9_999_999)
+
 
 @router.message(F.text)
 async def on_text(msg: Message):
@@ -30,7 +44,7 @@ async def on_text(msg: Message):
     step = state.get("step", 0)
     data = state.setdefault("data", {})
 
-    # -------- add_class --------
+    # ---------- ADD CLASS ----------
     if mode == "add_class":
         name = msg.text.strip()
         async with aiosqlite.connect(DB_PATH) as db:
@@ -45,69 +59,64 @@ async def on_text(msg: Message):
         USER_STATE.pop(msg.from_user.id, None)
         return await msg.answer(f"✅ Класс создан: <b>{name}</b> (TZ={DEFAULT_TZ})", reply_markup=back_kb())
 
-    # -------- add_student (с предложением записать в класс) --------
+    # ---------- ADD STUDENT (теперь users) ----------
     if mode == "add_student":
         if step == 0:
-            data["name"] = msg.text.strip()
+            data["display_name"] = msg.text.strip()  # положим как name (имя/ФИО целиком)
             state["step"] = 1
-            return await msg.answer("Шаг 2/2: отправьте @username (или оставьте пустым — напишите «-»).",
-                                    reply_markup=back_kb())
+            return await msg.answer(
+                "Шаг 2/2: отправьте @username (или оставьте пустым — напишите «-»).\n"
+                "(username теперь никуда не пишется — поле временное, для твоего удобства)",
+                reply_markup=back_kb()
+            )
         elif step == 1:
-            username = msg.text.strip()
-            if username == "-":
-                username = None
-            else:
-                username = username.lstrip("@") if username else None
+            # username больше никуда не сохраняем — в новой схеме его нет
+            _ = msg.text.strip()
 
+            # users требует UserID и post NOT NULL; остальное можно NULL
+            new_id = _gen_user_id()
             async with aiosqlite.connect(DB_PATH) as db:
-                db.row_factory = aiosqlite.Row
                 try:
                     await db.execute(
-                        "INSERT INTO students(name, username) VALUES (?, ?) "
-                        "ON CONFLICT(name) DO UPDATE SET username=excluded.username",
-                        (data["name"], username)
+                        "INSERT INTO users(UserID, name, post) VALUES(?, ?, ?)",
+                        (new_id, data["display_name"], "student")
                     )
                     await db.commit()
-                    row = await fetchone(db, "SELECT id, name, username FROM students WHERE name=?", (data["name"],))
-                    student_id = row["id"]
-                    classes = await db.execute_fetchall(
-                        "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC"
-                    )
+                    # классы для моментального зачисления
+                    db.row_factory = aiosqlite.Row
+                    classes = await fetchall(db, "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC")
                 except Exception as e:
                     return await msg.answer(f"Ошибка: {e}", reply_markup=back_kb())
 
             if not classes:
                 USER_STATE.pop(msg.from_user.id, None)
                 return await msg.answer(
-                    f"✅ Ученик добавлен/обновлён: <b>{data['name']}</b> (@{username or '—'})\n\n"
+                    f"✅ Ученик добавлен: <b>{data['display_name']}</b>\n\n"
                     f"Пока нет классов — создайте класс и запишите ученика позже.",
                     reply_markup=back_kb()
                 )
 
-            # показать список классов + «пропустить»
-            from keyboards import single_col_kb
-            from callbacks import CB_ENROLL_PICK_CLS, CB_STU_AFTER_ADD_SKIP
-            rows = [(c["name"], f"{CB_ENROLL_PICK_CLS}{student_id}:{c['id']}") for c in classes]
-            rows.append(("⏭ Пропустить", CB_STU_AFTER_ADD_SKIP))
+            # показать список классов + «⏭ Пропустить»
             USER_STATE.pop(msg.from_user.id, None)
+            rows = [(c["name"], f"{CB_ENROLL_PICK_CLS}{new_id}:{c['id']}") for c in classes]
+            rows.append(("⏭ Пропустить", CB_STU_AFTER_ADD_SKIP))
             return await msg.answer(
-                f"✅ Ученик добавлен/обновлён: <b>{data['name']}</b> (@{username or '—'})\n\n"
+                f"✅ Ученик добавлен: <b>{data['display_name']}</b>\n\n"
                 f"Сразу записать в класс?",
                 reply_markup=single_col_kb(rows)
             )
 
-    # -------- register (link chat) --------
+    # ---------- REGISTER ----------
     if mode == "register":
-        student_name = msg.text.strip()
-        async with aiosqlite.connect(DB_PATH) as db:
-            cur = await db.execute("UPDATE students SET chat_id=? WHERE name=?", (msg.chat.id, student_name))
-            await db.commit()
-            if cur.rowcount == 0:
-                return await msg.answer("Ученик не найден. Сначала добавьте его.", reply_markup=back_kb())
+        # В новой схеме нет chat_id у пользователей.
         USER_STATE.pop(msg.from_user.id, None)
-        return await msg.answer(f"✅ Чат привязан к ученику: <b>{student_name}</b>", reply_markup=back_kb())
+        return await msg.answer(
+            "В текущей версии БД привязка чата ученика отключена (в таблице users нет chat_id).\n"
+            "Если нужна — добавим отдельную таблицу, скажи.",
+            reply_markup=back_kb()
+        )
 
-    # -------- add_task (класс выбран кнопкой, остались шаги 2..4) --------
+    # ---------- ADD TASK (класс выбран кнопкой) ----------
     if mode == "add_task":
         if step == 1:
             data["title"] = msg.text.strip()
@@ -119,10 +128,11 @@ async def on_text(msg: Message):
             )
         elif step == 2:
             try:
-                data["due_utc"] = parse_utc_hhmm(msg.text)
+                due_utc = datetime.strptime(msg.text.strip(), "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
             except Exception:
                 return await msg.answer("❌ Некорректная дата. Нужен формат: YYYY-MM-DD HH:MM (UTC).",
                                         reply_markup=back_kb())
+            data["due_utc"] = due_utc
             state["step"] = 3
             return await msg.answer("Шаг 4/4: отправьте <b>описание</b> (или «-»).", reply_markup=back_kb())
         elif step == 3:
@@ -159,12 +169,11 @@ async def on_text(msg: Message):
                 reply_markup=back_kb()
             )
 
-    # -------- gen --------
+    # ---------- GEN ----------
     if mode == "gen":
         desc = msg.text.strip()
         if not desc:
             return await msg.answer("Опишите задачу текстом.", reply_markup=back_kb())
-        # запустить генерацию (в отдельной функции модуля gen)
         from handlers.gen import _run_generation
         USER_STATE.pop(msg.from_user.id, None)
         return await _run_generation(msg, desc)
