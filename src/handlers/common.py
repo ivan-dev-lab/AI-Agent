@@ -1,48 +1,50 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
+from aiogram.types import Message, CallbackQuery
 
-from keyboards import main_menu_kb, back_kb
-from callbacks import CB_BACK, CB_SETTINGS
+from keyboards import main_menu_kb, ga_main_kb, back_kb
+from utils import ensure_authorized, is_global_admin
 
 router = Router()
 
-def main_menu_text() -> str:
-    return (
-        "🏁 <b>Главное меню</b>\n\n"
-        "Выберите действие. Ввод данных происходит <i>после</i> нажатия кнопки.\n"
-        "Таймзона по умолчанию: <b>UTC</b>.\n"
-    )
-
-async def show_main_menu(target):
-    if isinstance(target, Message):
-        await target.answer(main_menu_text(), reply_markup=main_menu_kb())
+async def _show_main_for(user_id: int, target):
+    """Показывает нужное главное меню в зависимости от роли."""
+    if not await ensure_authorized(user_id, target):
+        return
+    if await is_global_admin(user_id):
+        text = (
+            "🏁 <b>Главное меню (Глобальный администратор)</b>\n\n"
+            "Выберите действие."
+        )
+        kb = ga_main_kb()
     else:
-        await target.message.edit_text(main_menu_text(), reply_markup=main_menu_kb())
+        text = (
+            "🏁 <b>Главное меню</b>\n\n"
+            "Выберите действие. Ввод данных происходит <i>после</i> нажатия кнопки.\n"
+            "Таймзона по умолчанию: <b>UTC</b>."
+        )
+        kb = main_menu_kb()
 
-@router.message(Command("start"))
+    if isinstance(target, Message):
+        await target.answer(text, reply_markup=kb)
+    else:
+        await target.message.edit_text(text, reply_markup=kb)
+
+@router.message(Command("start", "help"))
 async def cmd_start(msg: Message):
-    await show_main_menu(msg)
+    await _show_main_for(msg.from_user.id, msg)
 
-@router.message(Command("help"))
-async def cmd_help(msg: Message):
-    await show_main_menu(msg)
-
-@router.callback_query(F.data == CB_BACK)
+@router.callback_query(F.data == "back_to_main")
 async def cb_back(cq: CallbackQuery):
-    # сброс in-memory FSM (если где-то был)
-    from handlers.text import USER_STATE
-    USER_STATE.pop(cq.from_user.id, None)
-    await show_main_menu(cq)
+    await _show_main_for(cq.from_user.id, cq)
 
-@router.callback_query(F.data == CB_SETTINGS)
+# Настройки пока заглушка
+@router.callback_query(F.data == "settings")
 async def cb_settings(cq: CallbackQuery):
-    from handlers.text import USER_STATE
-    USER_STATE.pop(cq.from_user.id, None)
-    text = (
-        "⚙️ <b>Настройки</b>\n\n"
-        "• Таймзона: пока по умолчанию <b>UTC</b>.\n"
-        "• В будущей версии тут можно будет выбрать свою IANA TZ.\n"
+    if not await ensure_authorized(cq.from_user.id, cq):
+        return
+    await cq.message.edit_text(
+        "⚙️ <b>Настройки</b>\n\nСкоро тут можно будет выбрать таймзону и другое.",
+        reply_markup=back_kb()
     )
-    await cq.message.edit_text(text, reply_markup=back_kb())

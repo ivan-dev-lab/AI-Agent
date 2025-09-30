@@ -4,9 +4,10 @@ import dotenv
 from datetime import timedelta
 from aiogram.client.default import DefaultBotProperties
 
-dotenv.load_dotenv(os.path.abspath('.env'))
+dotenv.load_dotenv(os.path.abspath('AI-Agent/.env'))
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or ""
+
 if not BOT_TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в окружении (.env)")
 
