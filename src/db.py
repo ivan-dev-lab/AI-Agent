@@ -67,7 +67,7 @@ async def ensure_db() -> None:
 
             /* НОВОЕ: глобальные администраторы — храним только Telegram ID */
             CREATE TABLE IF NOT EXISTS administrators (
-                telegram_id INTEGER PRIMARY KEY
+                AdminID INTEGER PRIMARY KEY
             );
 
             /* Привязки ученик<->класс. student_id = users.UserID */
