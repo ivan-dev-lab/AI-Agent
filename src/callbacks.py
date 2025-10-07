@@ -22,21 +22,26 @@ CB_ADD_TASK_PICK_CLASS = "addtask_pick_cls:"  # +<class_id>
 # ===== Новые коллбэки: меню Глобального администратора =====
 CB_GA_MENU = "ga_menu"
 
-# Основные
-CB_GA_SCHOOL_ADD   = "ga_school_add"
-CB_GA_SCHOOL_EDIT  = "ga_school_edit"
-CB_GA_ASSIGN_LA    = "ga_assign_la"
-CB_GA_EDIT_LA      = "ga_edit_la"
+# --- Глобальный админ: разделы панели ---
+CB_GA_SEC_CORE = "ga_sec_core"      # Основные
+CB_GA_SEC_MORE = "ga_sec_more"      # Дополнительные
+CB_GA_SEC_INFO = "ga_sec_info"      # Информационные
 
-# Дополнительные
-CB_GA_ASSIGN_TEACHER = "ga_assign_teacher"
-CB_GA_ASSIGN_STUDENT = "ga_assign_student"
-CB_GA_EDIT_TEACHERS  = "ga_edit_teachers"
-CB_GA_EDIT_STUDENTS  = "ga_edit_students"
+# --- Глобальный админ: действия (основные) ---
+CB_GA_ADD_SCHOOL    = "ga_add_school"
+CB_GA_EDIT_SCHOOLS  = "ga_edit_schools"
+CB_GA_ASSIGN_LA     = "ga_assign_la"
+CB_GA_EDIT_LA       = "ga_edit_la"
 
-# Информационные
-CB_GA_LIST_SCHOOLS = "ga_list_schools"
-CB_GA_LIST_LA      = "ga_list_la"
-CB_GA_LIST_TEACHERS= "ga_list_teachers"
-CB_GA_LIST_STUDENTS= "ga_list_students"
-CB_GA_LIST_GA      = "ga_list_ga"
+# --- Глобальный админ: действия (дополнительные) ---
+CB_GA_ASSIGN_TEACHER  = "ga_assign_teacher"
+CB_GA_ASSIGN_STUDENT  = "ga_assign_student"
+CB_GA_EDIT_TEACHERS   = "ga_edit_teachers"
+CB_GA_EDIT_STUDENTS   = "ga_edit_students"
+
+# --- Глобальный админ: действия (информационные) ---
+CB_GA_LIST_SCHOOLS   = "ga_list_schools"
+CB_GA_LIST_LA        = "ga_list_la"
+CB_GA_LIST_TEACHERS  = "ga_list_teachers"
+CB_GA_LIST_STUDENTS  = "ga_list_students"
+CB_GA_LIST_GA        = "ga_list_ga"
