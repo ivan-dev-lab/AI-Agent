@@ -81,3 +81,18 @@ def ga_info_kb() -> InlineKeyboardMarkup:
         ("⬅ Назад к разделам", CB_GA_MENU),
     ]
     return single_col_kb(rows)
+
+# === GA: клавиатура редактирования конкретного УЗ ===
+from callbacks import (
+    CB_GA_EDIT_SCHOOLS,
+    CB_GA_ED_S_NAME, CB_GA_ED_S_SHORT, CB_GA_ED_S_ADDR, CB_GA_ED_S_TZ
+)
+
+def ga_edit_school_detail_kb(school_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Изменить название", callback_data=f"{CB_GA_ED_S_NAME}{school_id}")],
+        [InlineKeyboardButton(text="✏️ Изменить краткое имя", callback_data=f"{CB_GA_ED_S_SHORT}{school_id}")],
+        [InlineKeyboardButton(text="✏️ Изменить адрес", callback_data=f"{CB_GA_ED_S_ADDR}{school_id}")],
+        [InlineKeyboardButton(text="🌍 Изменить таймзону", callback_data=f"{CB_GA_ED_S_TZ}{school_id}")],
+        [InlineKeyboardButton(text="⬅ К списку УЗ", callback_data=CB_GA_EDIT_SCHOOLS)],
+    ])

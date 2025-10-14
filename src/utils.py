@@ -1,14 +1,12 @@
-# src/utils.py
 # -*- coding: utf-8 -*-
 import re
 from io import BytesIO
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from typing import Optional, Any
+from typing import Optional
 
 import aiosqlite
-from aiogram.types import BufferedInputFile, Message
-from aiogram.types import CallbackQuery  # только для type hints
+from aiogram.types import BufferedInputFile
 
 from config import DB_PATH
 
@@ -35,40 +33,47 @@ def parse_utc_hhmm(s: str) -> datetime:
     """'YYYY-MM-DD HH:MM' -> aware UTC datetime"""
     return datetime.strptime(s.strip(), "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
 
-# ---------- DB small helpers ----------
+# ---------- DB helpers ----------
 
-async def _fetchone(sql: str, params: tuple[Any, ...]) -> Optional[aiosqlite.Row]:
+async def _exists(sql: str, params: tuple) -> bool:
+    """Возвращает True, если SELECT что-то нашёл."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(sql, params)
         row = await cur.fetchone()
         await cur.close()
-        return row
+        return row is not None
 
 # ---------- Authorization helpers ----------
 
 async def is_global_admin(user_id: int) -> bool:
-    """Проверяет, есть ли user_id в таблице administrators (единственная колонка id)."""
-    row = await _fetchone("SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1", (user_id,))
-    return row is not None
+    """Проверяет наличие пользователя в таблице administrators (AdminID)."""
+    return await _exists(
+        "SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1",
+        (user_id,)
+    )
 
 async def is_known_user(user_id: int) -> bool:
-    """Проверяет, есть ли user_id в таблице users (UserID — это Telegram ID, без AUTOINCREMENT)."""
-    row = await _fetchone("SELECT 1 FROM users WHERE UserID = ? LIMIT 1", (user_id,))
-    return row is not None
+    """Проверяет наличие пользователя в таблице users (UserID)."""
+    return await _exists(
+        "SELECT 1 FROM users WHERE UserID = ? LIMIT 1",
+        (user_id,)
+    )
 
-async def ensure_authorized(user_id: int, target: Message | CallbackQuery) -> bool:
+async def ensure_authorized(user_id: int, target) -> bool:
     """
-    Если пользователь ни в administrators, ни в users — шлём 'не авторизован' и возвращаем False.
+    Если пользователя нет ни в administrators, ни в users —
+    отправляем лаконичное сообщение без кнопок и возвращаем False.
     target — Message или CallbackQuery.
     """
     if await is_global_admin(user_id) or await is_known_user(user_id):
         return True
 
     text = "🚫 Вы не авторизованы. Обратитесь к администратору."
-    # Отправляем обычное сообщение в чат (а не всплывающий alert)
-    if isinstance(target, Message):
+    try:
+        # Message
         await target.answer(text)
-    else:
+    except AttributeError:
+        # CallbackQuery
         await target.message.answer(text)
     return False

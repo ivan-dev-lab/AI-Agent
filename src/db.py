@@ -1,6 +1,7 @@
-# src/db.py
 import aiosqlite
 from typing import Any, Iterable, Optional
+from datetime import datetime, timezone
+
 from config import DB_PATH
 
 # ---- базовые утилиты ---------------------------------------------------------
@@ -51,13 +52,7 @@ async def ensure_db() -> None:
                 FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
             );
 
-            /* Таблица пользователей проекта (учителя/ученики/и т.п.)
-               Ваша актуальная схема:
-                 UserID INTEGER PRIMARY KEY,
-                 name   TEXT,
-                 post   TEXT NOT NULL,
-                 active INTEGER NOT NULL DEFAULT 0
-            */
+            /* Пользователи: UserID — Telegram ID, без AUTOINCREMENT */
             CREATE TABLE IF NOT EXISTS users (
                 UserID  INTEGER PRIMARY KEY,
                 name    TEXT,
@@ -65,7 +60,7 @@ async def ensure_db() -> None:
                 active  INTEGER NOT NULL DEFAULT 0
             );
 
-            /* НОВОЕ: глобальные администраторы — храним только Telegram ID */
+            /* Глобальные администраторы (храним только Telegram ID) */
             CREATE TABLE IF NOT EXISTS administrators (
                 AdminID INTEGER PRIMARY KEY
             );
@@ -78,6 +73,46 @@ async def ensure_db() -> None:
                 FOREIGN KEY(student_id) REFERENCES users(UserID) ON DELETE CASCADE,
                 FOREIGN KEY(class_id)   REFERENCES classes(id)  ON DELETE CASCADE
             );
+
+            /* === УЧЕБНЫЕ ЗАВЕДЕНИЯ (schools) и роли внутри них === */
+
+            /* Учебные заведения */
+            CREATE TABLE IF NOT EXISTS schools (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT UNIQUE NOT NULL,
+                short_name  TEXT,
+                address     TEXT,
+                timezone    TEXT NOT NULL DEFAULT 'UTC',
+                created_utc TEXT NOT NULL,
+                updated_utc TEXT NOT NULL
+            );
+
+            /* Локальные администраторы (users.UserID) по школам */
+            CREATE TABLE IF NOT EXISTS school_local_admins (
+                school_id INTEGER NOT NULL,
+                user_id   INTEGER NOT NULL,
+                PRIMARY KEY (school_id, user_id),
+                FOREIGN KEY(school_id) REFERENCES schools(id)   ON DELETE CASCADE,
+                FOREIGN KEY(user_id)   REFERENCES users(UserID) ON DELETE CASCADE
+            );
+
+            /* Учителя по школам */
+            CREATE TABLE IF NOT EXISTS school_teachers (
+                school_id INTEGER NOT NULL,
+                user_id   INTEGER NOT NULL,
+                PRIMARY KEY (school_id, user_id),
+                FOREIGN KEY(school_id) REFERENCES schools(id)   ON DELETE CASCADE,
+                FOREIGN KEY(user_id)   REFERENCES users(UserID) ON DELETE CASCADE
+            );
+
+            /* Ученики по школам */
+            CREATE TABLE IF NOT EXISTS school_students (
+                school_id INTEGER NOT NULL,
+                user_id   INTEGER NOT NULL,
+                PRIMARY KEY (school_id, user_id),
+                FOREIGN KEY(school_id) REFERENCES schools(id)   ON DELETE CASCADE,
+                FOREIGN KEY(user_id)   REFERENCES users(UserID) ON DELETE CASCADE
+            );
             """
         )
         await db.commit()
@@ -86,15 +121,81 @@ async def ensure_db() -> None:
 async def is_global_admin(user_id: int) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        row = await fetchone(db, "SELECT 1 FROM administrators WHERE telegram_id=?", (user_id,))
+        cur = await db.execute("SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1", (user_id,))
+        row = await cur.fetchone()
+        await cur.close()
         return row is not None
 
 async def is_known_user(user_id: int) -> bool:
     """Есть ли пользователь в users или administrators."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        r1 = await fetchone(db, "SELECT 1 FROM users WHERE UserID=?", (user_id,))
+        cur1 = await db.execute("SELECT 1 FROM users WHERE UserID = ? LIMIT 1", (user_id,))
+        r1 = await cur1.fetchone()
+        await cur1.close()
         if r1:
             return True
-        r2 = await fetchone(db, "SELECT 1 FROM administrators WHERE telegram_id=?", (user_id,))
+        cur2 = await db.execute("SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1", (user_id,))
+        r2 = await cur2.fetchone()
+        await cur2.close()
         return r2 is not None
+
+# ---- schools helpers -----------------------------------------------------------
+async def create_school(
+    name: str,
+    short_name: Optional[str],
+    address: Optional[str],
+    tz: str = "UTC",
+) -> int:
+    """Создать учебное заведение. Возвращает id."""
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            INSERT INTO schools(name, short_name, address, timezone, created_utc, updated_utc)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (name, short_name, address, tz, now, now)
+        )
+        await db.commit()
+        return cur.lastrowid
+
+async def list_schools() -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await fetchall(db, "SELECT * FROM schools ORDER BY name COLLATE NOCASE ASC")
+        return [dict(r) for r in rows]
+
+# === Schools: helpers for reading/updating ===
+from typing import Optional
+
+async def get_school_by_id(school_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetchone(db, "SELECT * FROM schools WHERE id = ?", (school_id,))
+        return dict(row) if row else None
+
+async def update_school_field(school_id: int, field: str, value) -> None:
+    """
+    Разрешённые поля: name, short_name, address, timezone.
+    Для optional-полей (short_name, address) value=None пишет NULL.
+    """
+    allowed = {"name", "short_name", "address", "timezone"}
+    if field not in allowed:
+        raise ValueError("Unsupported field")
+
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if value is None and field in {"short_name", "address"}:
+            await db.execute(
+                f"UPDATE schools SET {field}=NULL, updated_utc=? WHERE id=?",
+                (now, school_id)
+            )
+        else:
+            await db.execute(
+                f"UPDATE schools SET {field}=?, updated_utc=? WHERE id=?",
+                (value, now, school_id)
+            )
+        await db.commit()
