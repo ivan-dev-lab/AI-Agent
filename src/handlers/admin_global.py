@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from zoneinfo import ZoneInfo
-
+import aiosqlite
 from utils import ensure_authorized, is_global_admin
 from keyboards import (
     ga_panel_kb, ga_core_kb, ga_more_kb, ga_info_kb, back_kb,
@@ -17,7 +17,8 @@ from callbacks import (
 )
 from db import (
     list_schools, get_school_by_id, update_school_field, create_school,
-    create_pending_la, consume_pending_la, get_school_by_id
+    create_pending_la, consume_pending_la, get_school_by_id,
+    fetchall
 )
 
 
@@ -245,6 +246,146 @@ async def ga_assign_la_pick_school(cq: CallbackQuery):
     )
 
 
+# --- Редактирование локальных администраторов ---
+@router.callback_query(F.data == CB_GA_EDIT_LA)
+async def ga_edit_la_start(cq: CallbackQuery):
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_global_admin(cq.from_user.id):
+        return
+
+    schools = await list_schools()
+    if not schools:
+        return await cq.message.edit_text(
+            "❌ Нет учебных заведений.",
+            reply_markup=ga_core_kb()
+        )
+
+    rows = [(f"{s['name']}", f"ga_edit_la_pick:{s['id']}") for s in schools]
+    rows.append(("⬅️ Назад в «Основные»", CB_GA_BACK_TO_CORE))
+    await cq.message.edit_text(
+        "Выберите учебное заведение, чьих локальных администраторов вы хотите редактировать:",
+        reply_markup=single_col_kb(rows)
+    )
+
+
+@router.callback_query(F.data.startswith("ga_edit_la_pick:"))
+async def ga_edit_la_pick_school(cq: CallbackQuery):
+    if not await is_global_admin(cq.from_user.id):
+        return await cq.answer("Недостаточно прав", show_alert=True)
+
+    try:
+        school_id = int(cq.data.split(":", 1)[1])
+    except ValueError:
+        return await cq.answer("Некорректный ID школы", show_alert=True)
+
+    school = await get_school_by_id(school_id)
+    if not school:
+        return await cq.answer("УЗ не найдено", show_alert=True)
+
+    # Получаем список ЛА в этой школе
+    async with aiosqlite.connect("db.sqlite") as db:  # Замените на DB_PATH
+        from config import DB_PATH
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            rows = await db.execute(
+                "SELECT user_id FROM school_local_admins WHERE school_id = ?", (school_id,)
+            )
+            la_list = await rows.fetchall()
+
+    if not la_list:
+        return await cq.message.edit_text(
+            f"В <b>{school['name']}</b> пока нет локальных администраторов.",
+            reply_markup=back_to_core_kb()
+        )
+
+    la_ids = [str(r["user_id"]) for r in la_list]
+    la_text = "\n".join([f"• <code>{uid}</code>" for uid in la_ids])
+    # Кнопки "удалить" для каждого ЛА
+    buttons = [
+        [InlineKeyboardButton(text=f"Удалить ЛА {uid}", callback_data=f"ga_remove_la:{school_id}:{uid}")]
+        for uid in la_ids
+    ]
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад в «Основные»", callback_data=CB_GA_BACK_TO_CORE)])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await cq.message.edit_text(
+        f"Локальные администраторы в <b>{school['name']}</b>:\n\n{la_text}\n\n"
+        f"Выберите ЛА, роль которого хотите отозвать:",
+        reply_markup=kb
+    )
+
+
+@router.callback_query(F.data.startswith("ga_remove_la:"))
+async def ga_remove_la(cq: CallbackQuery):
+    if not await is_global_admin(cq.from_user.id):
+        return await cq.answer("Недостаточно прав", show_alert=True)
+
+    try:
+        _, school_id, user_id = cq.data.split(":", 2)
+        school_id = int(school_id)
+        user_id = int(user_id)
+    except ValueError:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    # Проверим, есть ли такой ЛА
+    from db import fetchone
+    async with aiosqlite.connect("db.sqlite") as db:  # Замените на DB_PATH
+        from config import DB_PATH
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            row = await fetchone(db, "SELECT 1 FROM school_local_admins WHERE school_id = ? AND user_id = ?", (school_id, user_id))
+            if not row:
+                return await cq.answer("❌ Этот пользователь не является ЛА в этой школе.", show_alert=True)
+
+    # Удаляем из school_local_admins
+    async with aiosqlite.connect("db.sqlite") as db:  # Замените на DB_PATH
+        from config import DB_PATH
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("DELETE FROM school_local_admins WHERE school_id = ? AND user_id = ?", (school_id, user_id))
+            await db.commit()
+
+    # === НОВОЕ: проверяем, есть ли у пользователя другие роли ===
+    async with aiosqlite.connect("db.sqlite") as db:  # Замените на DB_PATH
+        from config import DB_PATH
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Проверяем, является ли он ЛА в других школах
+            remaining_la = await db.execute(
+                "SELECT 1 FROM school_local_admins WHERE user_id = ? LIMIT 1", (user_id,)
+            )
+            remaining_la_row = await remaining_la.fetchone()
+
+            # Проверяем, является ли он учителем в какой-либо школе
+            remaining_teacher = await db.execute(
+                "SELECT 1 FROM school_teachers WHERE user_id = ? LIMIT 1", (user_id,)
+            )
+            remaining_teacher_row = await remaining_teacher.fetchone()
+
+            # Проверяем, является ли он учеником в какой-либо школе
+            remaining_student = await db.execute(
+                "SELECT 1 FROM school_students WHERE user_id = ? LIMIT 1", (user_id,)
+            )
+            remaining_student_row = await remaining_student.fetchone()
+
+            # Проверяем, является ли он глобальным администратором
+            remaining_ga = await db.execute(
+                "SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1", (user_id,)
+            )
+            remaining_ga_row = await remaining_ga.fetchone()
+
+    # Если у пользователя нет других ролей, удаляем его из users
+    if not any([remaining_la_row, remaining_teacher_row, remaining_student_row, remaining_ga_row]):
+        async with aiosqlite.connect("db.sqlite") as db:  # Замените на DB_PATH
+            from config import DB_PATH
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute("DELETE FROM users WHERE UserID = ?", (user_id,))
+                await db.commit()
+
+    await cq.answer("✅ Роль локального администратора отозвана.", show_alert=True)
+    # Возвращаем к списку ЛА в школе
+    await ga_edit_la_pick_school(cq)
+
 # --- Обработка текстовых сообщений (все FSM) ---
 @router.message(F.text)
 async def handle_ga_text_input(msg: Message):
@@ -456,12 +597,6 @@ async def _handle_ga_edit_school_step(msg: Message, st: dict):
 
 
 # --- Заглушки ---
-@router.callback_query(F.data == CB_GA_EDIT_LA)
-async def ga_edit_la(cq: CallbackQuery):
-    if not await is_global_admin(cq.from_user.id):
-        return
-    await cq.answer("Редактирование ЛА — скоро ✨", show_alert=True)
-
 @router.callback_query(F.data == CB_GA_ASSIGN_TEACHER)
 async def ga_assign_teacher(cq: CallbackQuery):
     if not await is_global_admin(cq.from_user.id):
