@@ -113,6 +113,14 @@ async def ensure_db() -> None:
                 FOREIGN KEY(school_id) REFERENCES schools(id)   ON DELETE CASCADE,
                 FOREIGN KEY(user_id)   REFERENCES users(UserID) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS pending_local_admins (
+                user_id     INTEGER PRIMARY KEY,
+                school_id   INTEGER NOT NULL,
+                password    TEXT NOT NULL,
+                created_utc TEXT NOT NULL,
+                FOREIGN KEY(school_id) REFERENCES schools(id) ON DELETE CASCADE
+            );
             """
         )
         await db.commit()
@@ -199,3 +207,75 @@ async def update_school_field(school_id: int, field: str, value) -> None:
                 (value, now, school_id)
             )
         await db.commit()
+
+# --- Локальные администраторы ---
+async def assign_local_admin(school_id: int, user_id: int) -> bool:
+    """Назначить ЛА. Возвращает True, если успешно (включая дубликат)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            await db.execute(
+                "INSERT OR IGNORE INTO school_local_admins(school_id, user_id) VALUES (?, ?)",
+                (school_id, user_id)
+            )
+            await db.commit()
+            return True
+        except Exception:
+            return False
+
+async def is_user_exists(user_id: int) -> bool:
+    """Проверяет, существует ли пользователь в таблице users."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetchone(db, "SELECT 1 FROM users WHERE UserID = ?", (user_id,))
+        return row is not None
+    
+import secrets
+import string
+
+# --- Pending Local Admins (для приглашений) ---
+async def create_pending_la(user_id: int, school_id: int) -> str:
+    """Создаёт запись в pending_local_admins и возвращает пароль."""
+    password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO pending_local_admins(user_id, school_id, password, created_utc)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, school_id, password, now)
+        )
+        await db.commit()
+    return password
+
+async def consume_pending_la(user_id: int, password: str) -> Optional[int]:
+    """
+    Проверяет пароль и активирует ЛА.
+    Возвращает school_id, если успешно, иначе None.
+    Удаляет запись из pending после успешной активации.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetchone(
+            db,
+            "SELECT school_id, password FROM pending_local_admins WHERE user_id = ?",
+            (user_id,)
+        )
+        if not row or row["password"] != password:
+            return None
+
+        school_id = row["school_id"]
+        # Удаляем из pending
+        await db.execute("DELETE FROM pending_local_admins WHERE user_id = ?", (user_id,))
+        # Добавляем в users (если ещё не добавлен)
+        await db.execute(
+            "INSERT OR IGNORE INTO users(UserID, post, active) VALUES (?, 'local_admin', 1)",
+            (user_id,)
+        )
+        # Назначаем ЛА
+        await db.execute(
+            "INSERT OR IGNORE INTO school_local_admins(school_id, user_id) VALUES (?, ?)",
+            (school_id, user_id)
+        )
+        await db.commit()
+        return school_id
