@@ -26,7 +26,7 @@ CB_GA_MENU = "ga_menu"
 CB_GA_SEC_CORE = "ga_sec_core"      # Основные
 CB_GA_SEC_MORE = "ga_sec_more"      # Дополнительные
 CB_GA_SEC_INFO = "ga_sec_info"      # Информационные
-
+CB_GA_BACK_TO_CORE = "ga_back_to_core"
 # Действия (основные)
 CB_GA_ADD_SCHOOL    = "ga_add_school"     # Добавить учебное заведение
 CB_GA_EDIT_SCHOOLS  = "ga_edit_schools"   # Редактирование учебных заведений
