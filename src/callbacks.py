@@ -1,3 +1,5 @@
+from aiogram.filters.callback_data import CallbackData
+
 # src/callbacks.py
 # Общие
 CB_BACK = "back_to_main"
@@ -52,3 +54,22 @@ CB_GA_ED_S_NAME  = "ga_es_name:"   # +<school_id>
 CB_GA_ED_S_SHORT = "ga_es_short:"  # +<school_id>
 CB_GA_ED_S_ADDR  = "ga_es_addr:"   # +<school_id>
 CB_GA_ED_S_TZ    = "ga_es_tz:"     # +<school_id>
+
+class StudentCB(CallbackData, prefix="student"):
+    action: str              # "menu" | "tasks"
+    page: int | None = None  # страница списка (пагинация)
+
+class TaskCB(CallbackData, prefix="task"):
+    action: str              # "detail"
+    task_id: int             # ID задания
+    page: int | None = None  # из какой страницы списка вернуться
+
+CB_STU_MENU  = "stu_menu"
+CB_STU_TASKS = "stu_tasks"  # открыть список заданий ученика
+
+CB_STU_MENU      = "stu_menu"
+CB_STU_TASKS     = "stu_tasks"
+CB_STU_TEACHERS  = "stu_teachers"
+CB_STU_GROUPS    = "stu_groups"
+CB_STU_SCHEDULE  = "stu_schedule"
+CB_STU_INFO      = "stu_info"

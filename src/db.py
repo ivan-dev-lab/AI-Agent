@@ -279,3 +279,93 @@ async def consume_pending_la(user_id: int, password: str) -> Optional[int]:
         )
         await db.commit()
         return school_id
+    
+# --- ЗАДАНИЯ / КЛАССЫ / ПРЕПОДАВАТЕЛИ ДЛЯ УЧЕНИКА -----------------------------
+import aiosqlite
+from typing import List, Tuple, Optional
+
+async def list_tasks_for_student(student_id: int, limit: int = 10, offset: int = 0) -> Tuple[list, bool]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await fetchall(
+            db,
+            """
+            SELECT t.id AS task_id, t.title, t.description, t.due_utc,
+                   c.id AS class_id, c.name AS class_name
+            FROM enrollments e
+            JOIN classes c ON c.id = e.class_id
+            JOIN tasks   t ON t.class_id = c.id
+            WHERE e.student_id = ?
+            ORDER BY datetime(t.due_utc) ASC, t.id ASC
+            LIMIT ? OFFSET ?
+            """,
+            (student_id, limit + 1, offset)
+        )
+        return rows[:limit], len(rows) > limit
+
+async def get_task_with_class(task_id: int) -> Optional[aiosqlite.Row]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        return await fetchone(
+            db,
+            """
+            SELECT t.id AS task_id, t.title, t.description, t.due_utc,
+                   c.id AS class_id, c.name AS class_name
+            FROM tasks t
+            JOIN classes c ON c.id = t.class_id
+            WHERE t.id = ?
+            """,
+            (task_id,)
+        )
+
+async def list_classes_for_student(student_id: int) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        return await fetchall(
+            db,
+            """
+            SELECT c.id, c.name
+            FROM enrollments e
+            JOIN classes c ON c.id = e.class_id
+            WHERE e.student_id = ?
+            ORDER BY c.name COLLATE NOCASE
+            """,
+            (student_id,)
+        )
+
+async def list_teachers_for_student(student_id: int) -> list:
+    """
+    Учителя берутся по школам, где числится ученик: school_students -> school_teachers.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        return await fetchall(
+            db,
+            """
+            SELECT u.UserID AS teacher_id, COALESCE(u.name, 'Без имени') AS name
+            FROM school_students ss
+            JOIN school_teachers st ON st.school_id = ss.school_id
+            JOIN users u            ON u.UserID    = st.user_id
+            WHERE ss.user_id = ?
+            GROUP BY u.UserID, u.name
+            ORDER BY name COLLATE NOCASE
+            """,
+            (student_id,)
+        )
+
+async def upcoming_tasks_for_student(student_id: int, limit: int = 10) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        return await fetchall(
+            db,
+            """
+            SELECT t.id AS task_id, t.title, t.due_utc, c.name AS class_name
+            FROM enrollments e
+            JOIN classes c ON c.id = e.class_id
+            JOIN tasks   t ON t.class_id = c.id
+            WHERE e.student_id = ?
+            ORDER BY datetime(t.due_utc) ASC
+            LIMIT ?
+            """,
+            (student_id, limit)
+        )

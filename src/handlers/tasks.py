@@ -4,6 +4,9 @@ from aiogram.types import CallbackQuery
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import aiosqlite
+from callbacks import TaskCB
+from keyboards import task_detail_kb
+from db import get_task_with_class
 
 from config import DB_PATH
 from db import fetchall, fetchone
@@ -11,6 +14,8 @@ from keyboards import back_kb, single_col_kb
 from callbacks import CB_ADD_TASK, CB_ADD_TASK_PICK_CLASS, CB_LIST_TASKS
 from utils import fmt_dt_local
 from scheduler_jobs import schedule_task_jobs
+from utils import ensure_role
+
 
 router = Router()
 
@@ -109,3 +114,20 @@ async def cb_list_tasks(cq: CallbackQuery):
             lines.append(f"#{r['id']} • {r['class_name']} • <b>{r['title']}</b> — {due_local_str} {tz.key}")
         text = "\n".join(lines)
     await cq.message.edit_text(text, reply_markup=back_kb())
+
+
+@router.callback_query(TaskCB.filter(F.action == "detail"))
+async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
+    if not await ensure_role(cb.from_user.id, "student", cb):
+        return
+    t = await get_task_with_class(callback_data.task_id)
+    if not t:
+        await cb.answer("Задание не найдено", show_alert=True); return
+    text = (
+        f"📝 <b>{t['title']}</b>\n"
+        f"Класс: <b>{t['class_name']}</b>\n"
+        f"Дедлайн (UTC): <code>{t['due_utc']}</code>\n\n"
+        f"{t['description'] or '—'}"
+    )
+    await cb.message.edit_text(text, reply_markup=task_detail_kb(callback_data.page))
+    await cb.answer()

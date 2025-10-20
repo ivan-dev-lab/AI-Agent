@@ -77,3 +77,43 @@ async def ensure_authorized(user_id: int, target) -> bool:
         # CallbackQuery
         await target.message.answer(text)
     return False
+
+async def has_post(user_id: int, post: str) -> bool:
+    """Есть ли у пользователя конкретная роль (post) в таблице users."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT 1 FROM users WHERE UserID = ? AND post = ? LIMIT 1",
+            (user_id, post)
+        )
+        row = await cur.fetchone()
+        await cur.close()
+        return row is not None
+
+async def ensure_role(user_id: int, post: str, target) -> bool:
+    """
+    Гарантирует, что у пользователя заданная роль.
+    Если роли нет — отправляет сообщение и возвращает False.
+    target — Message или CallbackQuery.
+    """
+    if await has_post(user_id, post):
+        return True
+
+    text = "🚫 Доступ запрещён: требуется роль «{0}».".format(post)
+    try:
+        await target.answer(text)            # Message
+    except AttributeError:
+        await target.message.answer(text)    # CallbackQuery
+    return False
+
+async def has_post(user_id: int, post: str) -> bool:
+    """Есть ли у пользователя конкретная роль (post) в таблице users."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT 1 FROM users WHERE UserID = ? AND post = ? LIMIT 1",
+            (user_id, post)
+        )
+        row = await cur.fetchone()
+        await cur.close()
+        return row is not None
