@@ -10,19 +10,27 @@ from db import consume_pending_la, get_school_by_id
 from config import DB_PATH
 import aiosqlite
 
+from keyboards import main_menu_kb, ga_main_kb, back_kb, InlineKeyboardMarkup, InlineKeyboardButton, student_menu_kb
+from utils import ensure_authorized, is_global_admin
+from utils import has_post
+from callbacks import CB_STU_MENU
+
 
 router = Router()
-
 
 async def _show_main_for(user_id: int, target):
     if not await ensure_authorized(user_id, target):
         return
+
     if await is_global_admin(user_id):
         text = (
             "🏁 <b>Главное меню (Глобальный администратор)</b>\n\n"
             "Выберите действие."
         )
         kb = ga_main_kb()
+    elif await has_post(user_id, "student"):  # <-- новая ветка
+        text = "🎓 <b>Меню ученика</b>"
+        kb = student_menu_kb()
     else:
         text = (
             "🏁 <b>Главное меню</b>\n\n"
@@ -35,7 +43,6 @@ async def _show_main_for(user_id: int, target):
         await target.answer(text, reply_markup=kb)
     else:
         await target.message.edit_text(text, reply_markup=kb)
-
 
 def _cancel_kb():
     return InlineKeyboardMarkup(inline_keyboard=[

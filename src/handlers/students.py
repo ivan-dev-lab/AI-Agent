@@ -1,38 +1,121 @@
-# -*- coding: utf-8 -*-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.filters import Command
-import aiosqlite
-
-from config import DB_PATH
-from keyboards import back_kb, single_col_kb
+from utils import ensure_role, fmt_dt_local
 from callbacks import (
-    CB_ADD_STUDENT, CB_REGISTER,
-    CB_STU_AFTER_ADD_SKIP, CB_ENROLL_PICK_CLS
+    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS, CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK
 )
-from utils import display_student
+from keyboards import student_menu_kb, tasks_list_kb
+from db import (
+    list_tasks_for_student, list_classes_for_student, list_teachers_for_student, upcoming_tasks_for_student
+)
+from zoneinfo import ZoneInfo
+from config import DEFAULT_TZ
 
 router = Router()
+PAGE_SIZE = 8
 
-@router.callback_query(F.data == CB_ADD_STUDENT)
-async def cb_add_student(cq: CallbackQuery):
-    from handlers.text import USER_STATE
-    USER_STATE[cq.from_user.id] = {"mode": "add_student", "step": 0, "data": {}, "chat_id": cq.message.chat.id}
-    await cq.message.edit_text(
-        "👤 <b>Добавление ученика</b>\n\n"
-        "Шаг 1/2: отправьте <b>имя ученика</b>.\n", reply_markup=back_kb()
+@router.message(Command("student"))
+async def student_menu_cmd(msg: Message):
+    if not await ensure_role(msg.from_user.id, "student", msg):
+        return
+    await msg.answer("🎓 Меню ученика", reply_markup=student_menu_kb())
+
+@router.callback_query(F.data == CB_STU_MENU)
+async def student_menu_cb(cq: CallbackQuery):
+    if not await ensure_role(cq.from_user.id, "student", cq):
+        return
+    await cq.message.edit_text("🎓 Меню ученика", reply_markup=student_menu_kb())
+    await cq.answer()
+
+# --- Мои задания (список + вход в детали через кнопки-строки)
+from callbacks import StudentCB  # для пагинации и возврата
+@router.callback_query(F.data == CB_STU_TASKS)
+async def student_tasks_entry(cq: CallbackQuery):
+    if not await ensure_role(cq.from_user.id, "student", cq):
+        return
+    page = 0
+    tasks, has_next = await list_tasks_for_student(cq.from_user.id, limit=PAGE_SIZE, offset=0)
+    text = "📋 Мои задания\n\nВыберите задание, чтобы открыть подробности." if tasks else "📋 Мои задания\n\nПока заданий нет."
+    await cq.message.edit_text(text, reply_markup=tasks_list_kb(tasks, page, has_next))
+    await cq.answer()
+
+# --- Мои преподаватели
+@router.callback_query(F.data == CB_STU_TEACHERS)
+async def student_teachers(cq: CallbackQuery):
+    if not await ensure_role(cq.from_user.id, "student", cq):
+        return
+    rows = await list_teachers_for_student(cq.from_user.id)
+    if not rows:
+        text = "👨‍🏫 Мои преподаватели\n\nПока список пуст."
+        kb = student_menu_kb()
+    else:
+        text = "👨‍🏫 Мои преподаватели:\n\n" + "\n".join([f"• {r['name']}" for r in rows])
+        from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
+        ])
+    await cq.message.edit_text(text, reply_markup=kb)
+    await cq.answer()
+
+# --- Мои группы
+@router.callback_query(F.data == CB_STU_GROUPS)
+async def student_groups(cq: CallbackQuery):
+    if not await ensure_role(cq.from_user.id, "student", cq):
+        return
+    rows = await list_classes_for_student(cq.from_user.id)
+    if not rows:
+        text = "🏫 Мои группы\n\nВы пока не записаны ни в один класс."
+    else:
+        text = "🏫 Мои группы:\n\n" + "\n".join([f"• {r['name']}" for r in rows])
+    from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
+    ])
+    await cq.message.edit_text(text, reply_markup=kb)
+    await cq.answer()
+
+# --- Расписание / напоминания (ближайшие дедлайны)
+@router.callback_query(F.data == CB_STU_SCHEDULE)
+async def student_schedule(cq: CallbackQuery):
+    if not await ensure_role(cq.from_user.id, "student", cq):
+        return
+    rows = await upcoming_tasks_for_student(cq.from_user.id, limit=10)
+    if not rows:
+        text = "📆 Расписание / напоминания\n\nБлижайших дедлайнов нет."
+    else:
+        tz = ZoneInfo(DEFAULT_TZ)
+        lines = []
+        from datetime import datetime
+        for r in rows:
+            due = datetime.fromisoformat(r["due_utc"]).astimezone(tz).strftime("%Y-%m-%d %H:%M")
+            lines.append(f"• {r['title']} — {r['class_name']} — {due} {tz.key}")
+        text = "📆 Расписание / напоминания\n\n" + "\n".join(lines)
+    from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
+    ])
+    await cq.message.edit_text(text, reply_markup=kb)
+    await cq.answer()
+
+# --- Информация
+@router.callback_query(F.data == CB_STU_INFO)
+async def student_info(cq: CallbackQuery):
+    if not await ensure_role(cq.from_user.id, "student", cq):
+        return
+    text = (
+        "ℹ️ <b>Информация</b>\n\n"
+        "• Используйте раздел «📋 Мои задания», чтобы открыть список и подробности.\n"
+        "• «📆 Расписание» показывает ближайшие дедлайны.\n"
+        "• По вопросам доступа — свяжитесь с администратором вашей школы."
     )
-
-@router.callback_query(F.data == CB_REGISTER)
-async def cb_register(cq: CallbackQuery):
-    from handlers.text import USER_STATE
-    USER_STATE[cq.from_user.id] = {"mode": "register", "step": 0, "data": {}, "chat_id": cq.message.chat.id}
-    await cq.message.edit_text(
-        "💬 <b>Привязать чат ученика</b>\n\n"
-        "Шаг 1/1: отправьте <b>имя ученика</b> для привязки к этому чату.\n", reply_markup=back_kb()
-    )
-
-# опциональный коллбэк если понадобится: после добавления ученика снова показать классы
-@router.callback_query(F.data == CB_STU_AFTER_ADD_SKIP)
-async def cb_stu_after_add_skip(cq: CallbackQuery):
-    await cq.message.edit_text("Ок, пропускаем. Что дальше?", reply_markup=back_kb())
+    from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
+    ])
+    await cq.message.edit_text(text, reply_markup=kb)
+    await cq.answer()
