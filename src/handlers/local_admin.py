@@ -173,7 +173,7 @@ async def la_back_to_core(cq: CallbackQuery):
         return
     await cq.message.edit_text("🧱 <b>Основные функции</b>\nВыберите действие:", reply_markup=la_core_kb())
 
-
+ 
 
 # ==========================================================
 #        1                 FSM
