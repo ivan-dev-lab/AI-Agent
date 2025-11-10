@@ -1,20 +1,35 @@
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+import logging
+from aiogram import Router, F, types
 from aiogram.filters import Command
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from utils import ensure_role, fmt_dt_local
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+from zoneinfo import ZoneInfo
+
+
 from callbacks import (
-    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS, CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK
+    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS, 
+    CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK, StudentCB
 )
 from keyboards import student_menu_kb, tasks_list_kb
 from db import (
-    list_tasks_for_student, list_classes_for_student, list_teachers_for_student, upcoming_tasks_for_student
+    list_tasks_for_student, list_classes_for_student, 
+    list_teachers_for_student, upcoming_tasks_for_student
 )
-from zoneinfo import ZoneInfo
+# from src.utils import send_to_neural_api
 from config import DEFAULT_TZ
 
 router = Router()
+logger = logging.getLogger(__name__)
 PAGE_SIZE = 8
 
+# Состояния для нейросети
+class AskAIState(StatesGroup):
+    waiting_for_query = State()
+    selected_task_id = State()
+
+# Главное меню ученика
 @router.message(Command("student"))
 async def student_menu_cmd(msg: Message):
     if not await ensure_role(msg.from_user.id, "student", msg):
@@ -28,8 +43,7 @@ async def student_menu_cb(cq: CallbackQuery):
     await cq.message.edit_text("🎓 Меню ученика", reply_markup=student_menu_kb())
     await cq.answer()
 
-# --- Мои задания (список + вход в детали через кнопки-строки)
-from callbacks import StudentCB  # для пагинации и возврата
+# Мои задания с пагинацией
 @router.callback_query(F.data == CB_STU_TASKS)
 async def student_tasks_entry(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -40,7 +54,67 @@ async def student_tasks_entry(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=tasks_list_kb(tasks, page, has_next))
     await cq.answer()
 
-# --- Мои преподаватели
+# Открытие конкретного задания (используем данные из списка)
+@router.callback_query(F.data.startswith("open_task_"))
+async def open_task(callback: CallbackQuery, state: FSMContext):
+    if not await ensure_role(callback.from_user.id, "student", callback):
+        return
+        
+    task_id = int(callback.data.split("_")[-1])
+    
+    # Получаем список заданий и находим нужное задание по ID
+    tasks, _ = await list_tasks_for_student(callback.from_user.id, limit=100, offset=0)
+    task = next((t for t in tasks if t['id'] == task_id), None)
+    
+    if not task:
+        await callback.message.answer("Задание не найдено.")
+        return
+
+    # Клавиатура с кнопкой нейросети и назад
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🤖 Спросить у нейросети", callback_data=f"ask_ai_{task_id}")],
+        [InlineKeyboardButton(text="🔙 Назад к заданиям", callback_data=CB_STU_TASKS)]
+    ])
+
+    await callback.message.edit_text(
+        f"📘 *{task['title']}*\n\n{task['description']}",
+        parse_mode="Markdown",
+        reply_markup=kb
+    )
+    await callback.answer()
+
+# Начало запроса к нейросети
+@router.callback_query(F.data.startswith("ask_ai_"))
+async def ask_ai(callback: CallbackQuery, state: FSMContext):
+    if not await ensure_role(callback.from_user.id, "student", callback):
+        return
+        
+    task_id = int(callback.data.split("_")[-1])
+    await state.update_data(selected_task_id=task_id)
+
+    await callback.message.answer("✍️ Введи свой вопрос для нейросети:")
+    await state.set_state(AskAIState.waiting_for_query)
+    await callback.answer()
+
+# # Обработка запроса к нейросети
+# @router.message(AskAIState.waiting_for_query)
+# async def process_ai_query(message: Message, state: FSMContext):
+#     user_data = await state.get_data()
+#     task_id = user_data.get("selected_task_id")
+
+#     query_text = message.text.strip()
+#     await message.answer("⏳ Отправляю запрос нейросети...")
+
+#     try:
+#         response = await send_to_neural_api(query_text, task_id, message.from_user.id)
+#         await message.answer(f"🤖 Ответ нейросети:\n\n{response}")
+#     except Exception as e:
+#         logger.exception("Ошибка при обращении к нейросети: %s", e)
+#         await message.answer("⚠️ Произошла ошибка при обращении к нейросети.")
+
+#     await state.clear()
+
+# Остальные функции (преподаватели, группы, расписание, информация) остаются без изменений
 @router.callback_query(F.data == CB_STU_TEACHERS)
 async def student_teachers(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -51,7 +125,6 @@ async def student_teachers(cq: CallbackQuery):
         kb = student_menu_kb()
     else:
         text = "👨‍🏫 Мои преподаватели:\n\n" + "\n".join([f"• {r['name']}" for r in rows])
-        from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
@@ -59,7 +132,6 @@ async def student_teachers(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
 
-# --- Мои группы
 @router.callback_query(F.data == CB_STU_GROUPS)
 async def student_groups(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -69,7 +141,6 @@ async def student_groups(cq: CallbackQuery):
         text = "🏫 Мои группы\n\nВы пока не записаны ни в один класс."
     else:
         text = "🏫 Мои группы:\n\n" + "\n".join([f"• {r['name']}" for r in rows])
-    from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
@@ -77,7 +148,6 @@ async def student_groups(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
 
-# --- Расписание / напоминания (ближайшие дедлайны)
 @router.callback_query(F.data == CB_STU_SCHEDULE)
 async def student_schedule(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -93,7 +163,6 @@ async def student_schedule(cq: CallbackQuery):
             due = datetime.fromisoformat(r["due_utc"]).astimezone(tz).strftime("%Y-%m-%d %H:%M")
             lines.append(f"• {r['title']} — {r['class_name']} — {due} {tz.key}")
         text = "📆 Расписание / напоминания\n\n" + "\n".join(lines)
-    from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
@@ -101,7 +170,6 @@ async def student_schedule(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
 
-# --- Информация
 @router.callback_query(F.data == CB_STU_INFO)
 async def student_info(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -112,7 +180,6 @@ async def student_info(cq: CallbackQuery):
         "• «📆 Расписание» показывает ближайшие дедлайны.\n"
         "• По вопросам доступа — свяжитесь с администратором вашей школы."
     )
-    from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],

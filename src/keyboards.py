@@ -8,8 +8,10 @@ from callbacks import StudentCB, TaskCB
 from callbacks import (
     CB_BACK, CB_SETTINGS,
     CB_ADD_TASK, CB_LIST_TASKS, CB_ADD_CLASS, CB_ADD_STUDENT, CB_ENROLL, CB_REGISTER, CB_GEN,
-    CB_GA_MENU
+    CB_GA_MENU, CB_TEACHER_MENU, CB_T_ASSIGN_STUDENT, CB_T_EDIT_STUDENTS,
+    CB_T_CREATE_GROUP, CB_T_EDIT_GROUP, CB_T_ADD_TASK, CB_T_LIST_TASKS,
 )
+
 from callbacks import (
     CB_GA_MENU, CB_GA_SEC_CORE, CB_GA_SEC_MORE, CB_GA_SEC_INFO, CB_BACK,
     CB_GA_ADD_SCHOOL, CB_GA_EDIT_SCHOOLS, CB_GA_ASSIGN_LA, CB_GA_EDIT_LA,
@@ -36,6 +38,23 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🤖 Сгенерировать код (описанием)", callback_data=CB_GEN)],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data=CB_SETTINGS)],
     ])
+
+def teacher_main_kb() -> InlineKeyboardMarkup:
+    """
+    Главное меню для роли Учитель (teacher).
+    Пункты соответствуют скриншоту: назначить ученика, редактирование учеников,
+    создать группу, редактировать группу (добавить/удалить), добавить задание, список заданий.
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👨‍🎓 Назначить ученика", callback_data=CB_T_ASSIGN_STUDENT)],
+        [InlineKeyboardButton(text="✏️ Редактировать учеников", callback_data=CB_T_EDIT_STUDENTS)],
+        [InlineKeyboardButton(text="📁 Создать группу", callback_data=CB_T_CREATE_GROUP)],
+        [InlineKeyboardButton(text="⚙️ Редактировать группу (добавить/удалить)", callback_data=CB_T_EDIT_GROUP)],
+        [InlineKeyboardButton(text="➕ Добавить задание", callback_data=CB_T_ADD_TASK)],
+        [InlineKeyboardButton(text="📋 Список заданий", callback_data=CB_T_LIST_TASKS)],
+        [InlineKeyboardButton(text="⬅ Назад в главное меню", callback_data=CB_BACK)]
+    ])
+
 
 def ga_main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -129,10 +148,22 @@ def tasks_list_kb(tasks: list, page: int, has_next: bool) -> InlineKeyboardMarku
     kb.row(InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK))
     return kb.as_markup()
 
-def task_detail_kb(back_page: int | None) -> InlineKeyboardMarkup:
+def task_detail_kb(back_page: int | None, task_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     if back_page is not None:
         kb.button(text="⬅️ К списку заданий", callback_data=StudentCB(action="tasks", page=back_page).pack())
+    # Добавляем две новые кнопки — нейросеть и учитель
+    kb.row(
+        InlineKeyboardButton(
+            text="🤖 Спросить у нейросети",
+            callback_data=TaskCB(action="ask_ai", task_id=task_id, page=back_page).pack()
+        ),
+        InlineKeyboardButton(
+            text="✉️ Спросить у учителя",
+            callback_data=TaskCB(action="ask_teacher", task_id=task_id, page=back_page).pack()
+        )
+    )
     kb.button(text="🏠 Главное меню", callback_data=CB_BACK)
     kb.adjust(1)
     return kb.as_markup()
+

@@ -73,3 +73,14 @@ CB_STU_TEACHERS  = "stu_teachers"
 CB_STU_GROUPS    = "stu_groups"
 CB_STU_SCHEDULE  = "stu_schedule"
 CB_STU_INFO      = "stu_info"
+
+# --- добавляем для роли teacher ---
+CB_TEACHER_MENU = "teacher_menu"
+
+CB_T_MAIN = "t_main"            # показать основное меню учителя
+CB_T_ASSIGN_STUDENT = "t_assign_student"   # назначить ученика
+CB_T_EDIT_STUDENTS = "t_edit_students"     # редактировать учеников
+CB_T_CREATE_GROUP = "t_create_group"       # создать группу
+CB_T_EDIT_GROUP = "t_edit_group"           # редактировать группу (добав/удал)
+CB_T_ADD_TASK = "t_add_task"               # добавить задание
+CB_T_LIST_TASKS = "t_list_tasks"           # список заданий

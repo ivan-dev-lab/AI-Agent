@@ -16,6 +16,8 @@ from handlers.classes import router as classes_router
 from handlers.gen import router as gen_router
 from handlers.text import router as text_router
 from handlers.admin_global import router as ga_router  # NEW
+from handlers.teacher import router as teacher_router #teacher new
+
 
 dotenv.load_dotenv()
 
@@ -34,6 +36,7 @@ async def main():
     dp.include_router(classes_router)
     dp.include_router(gen_router)
     dp.include_router(text_router)
+    dp.include_router(teacher_router)
 
     print("Bot is running. Press Ctrl+C to stop.")
     await dp.start_polling(bot)

@@ -10,7 +10,7 @@ from db import consume_pending_la, get_school_by_id
 from config import DB_PATH
 import aiosqlite
 
-from keyboards import main_menu_kb, ga_main_kb, back_kb, InlineKeyboardMarkup, InlineKeyboardButton, student_menu_kb
+from keyboards import main_menu_kb, ga_main_kb, back_kb, InlineKeyboardMarkup, InlineKeyboardButton, student_menu_kb, teacher_main_kb
 from utils import ensure_authorized, is_global_admin
 from utils import has_post
 from callbacks import CB_STU_MENU
@@ -31,6 +31,12 @@ async def _show_main_for(user_id: int, target):
     elif await has_post(user_id, "student"):  # <-- новая ветка
         text = "🎓 <b>Меню ученика</b>"
         kb = student_menu_kb()
+    elif await has_post(user_id, "teacher"):
+        text = (
+            "👩‍🏫 <b>Меню учителя</b>\n\n"
+            "Выберите действие."
+        )
+        kb = teacher_main_kb()
     else:
         text = (
             "🏁 <b>Главное меню</b>\n\n"
