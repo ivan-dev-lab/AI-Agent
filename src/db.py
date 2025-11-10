@@ -481,4 +481,4 @@ async def get_pending_teachers(la_user_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         rows = await fetchall(db, "SELECT user_id, password FROM pending_teachers WHERE la_user_id = ?", (la_user_id,))
         return rows
-# === конец добавленного блока ===
+# === конец добавленного блока ===1
