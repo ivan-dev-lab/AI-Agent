@@ -403,14 +403,22 @@ async def create_teacher_for_school(user_id: int, la_user_id: int) -> bool:
         return False
     async with aiosqlite.connect(DB_PATH) as db:
         try:
-            # Добавляем пользователя, если его нет
-            await db.execute("INSERT OR IGNORE INTO users(UserID, post, active) VALUES (?, 'teacher', 1)", (user_id,))
+            await db.execute(
+                "INSERT OR IGNORE INTO users(UserID, post, active) VALUES (?, 'teacher', 1)",
+                (user_id,)
+            )
             for sid in school_ids:
-                await db.execute("INSERT INTO teachers(user_id, school_id) VALUES (?, ?)", (user_id, sid))
+                await db.execute(
+                    "INSERT OR IGNORE INTO school_teachers(school_id, user_id) VALUES (?, ?)",
+                    (sid, user_id)
+                )
             await db.commit()
             return True
-        except Exception:
+        except Exception as e:
+            await db.rollback()
+            print("create_teacher_for_school error:", e)
             return False
+
 
 
 async def create_student_for_school(user_id: int, la_user_id: int) -> bool:
@@ -436,8 +444,12 @@ async def get_teachers_for_la(la_user_id: int):
         return []
     placeholders = ",".join("?" * len(school_ids))
     async with aiosqlite.connect(DB_PATH) as db:
-        rows = await fetchall(db, f"SELECT user_id, school_id FROM teachers WHERE school_id IN ({placeholders})", tuple(school_ids))
-        return rows
+        return await fetchall(
+            db,
+            f"SELECT user_id, school_id FROM school_teachers WHERE school_id IN ({placeholders})",
+            tuple(school_ids)
+        )
+
 
 
 async def generate_temp_password() -> str:
@@ -469,4 +481,4 @@ async def get_pending_teachers(la_user_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         rows = await fetchall(db, "SELECT user_id, password FROM pending_teachers WHERE la_user_id = ?", (la_user_id,))
         return rows
-# === конец добавленного блока ===
+# === конец добавленного блока ===1

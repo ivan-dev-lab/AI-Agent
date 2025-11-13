@@ -167,9 +167,16 @@ async def la_list_local_admins(cq: CallbackQuery):
     except Exception as e:
         await cq.answer(f"Ошибка: {e}", show_alert=True)
 
+@router.callback_query(F.data == CB_LA_BACK_TO_CORE)
+async def la_back_to_core(cq: CallbackQuery):
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+    await cq.message.edit_text("🧱 <b>Основные функции</b>\nВыберите действие:", reply_markup=la_core_kb())
+
+ 
 
 # ==========================================================
-#                         FSM
+#        1                 FSM
 # ==========================================================
 
 @router.message(F.text)
@@ -193,13 +200,30 @@ async def handle_la_text_input(msg: Message):
 
     try:
         if mode == "assign_teacher":
-            await create_teacher_for_school(user_id, msg.from_user.id)
-            await msg.answer(f"✅ Учитель <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
+            ok = await create_teacher_for_school(user_id, msg.from_user.id)
+            if ok:
+                await msg.answer(f"✅ Учитель <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
+            else:
+                await msg.answer(
+                    "❌ Не удалось добавить учителя.\n"
+                    "Проверьте, что вы привязаны как ЛА к школе и что такой пользователь допустим.",
+                    reply_markup=la_core_kb()
+                )
+
         elif mode == "assign_student":
-            await create_student_for_school(user_id, msg.from_user.id)
-            await msg.answer(f"✅ Ученик <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
+            ok = await create_student_for_school(user_id, msg.from_user.id)
+            if ok:
+                await msg.answer(f"✅ Ученик <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
+            else:
+                await msg.answer(
+                    "❌ Не удалось добавить ученика.\n"
+                    "Проверьте, что вы привязаны как ЛА к школе.",
+                    reply_markup=la_core_kb()
+                )
+
         else:
             await msg.answer("❌ Неизвестный режим.")
+
     except Exception as e:
         await msg.answer(f"❌ Ошибка: {e}")
     finally:
