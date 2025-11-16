@@ -54,7 +54,6 @@ async def student_teachers(cq: CallbackQuery):
         from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
-            [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
         ])
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
@@ -72,7 +71,6 @@ async def student_groups(cq: CallbackQuery):
     from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
     ])
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
@@ -96,7 +94,6 @@ async def student_schedule(cq: CallbackQuery):
     from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
     ])
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
@@ -115,7 +112,6 @@ async def student_info(cq: CallbackQuery):
     from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
     ])
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
