@@ -17,12 +17,17 @@ from callbacks import (
     CB_STU_AFTER_ADD_SKIP,
     CB_ENROLL_PICK_CLS,
 )
+from callbacks import CB_T_ASSIGN_PICK_CLS
+
+from callbacks import (
+    CB_T_EDIT_PICK_CLS, CB_T_EDIT_PICK_STU, CB_T_EDIT_BACK_STUDENTS,
+    CB_T_GEDIT_BACK_GROUPS, CB_T_GEDIT_BACK_ACTIONS
+)
 
 # простой in-memory FSM, как и было в проекте
 USER_STATE = {}   # {user_id: {"mode": str, "step": int, "data": dict, "chat_id": int}}
 
 router = Router()
-
 
 def _gen_user_id() -> int:
     """
@@ -34,9 +39,11 @@ def _gen_user_id() -> int:
 
 @router.message(F.text)
 async def on_text(msg: Message):
+    # DEBUG: маяк, чтобы понять, доходит ли вообще сюда управление
+    print("on_text CALLED:", msg.from_user.id)
+
     state = USER_STATE.get(msg.from_user.id)
     if not state:
-        # нет активного режима — покажем меню
         from handlers.common import show_main_menu
         return await show_main_menu(msg)
 
@@ -47,17 +54,40 @@ async def on_text(msg: Message):
     # ---------- ADD CLASS ----------
     if mode == "add_class":
         name = msg.text.strip()
+        if not name:
+            return await msg.answer(
+                "❗️Название группы не может быть пустым. Введите название ещё раз:",
+                reply_markup=back_kb()
+            )
+
         async with aiosqlite.connect(DB_PATH) as db:
             try:
+                # сохраняем название группы и tg-id создателя
                 await db.execute(
-                    "INSERT INTO classes(name, owner_chat_id, timezone) VALUES (?, ?, ?)",
-                    (name, msg.chat.id, DEFAULT_TZ)
+                    "INSERT INTO classes(name, owner_chat_id) VALUES (?, ?)",
+                    (name, msg.from_user.id)
                 )
                 await db.commit()
+            except aiosqlite.IntegrityError:
+                # name, скорее всего, UNIQUE — человекочитабельная ошибка
+                return await msg.answer(
+                    "❌ Группа с таким названием уже существует. Введите другое имя:",
+                    reply_markup=back_kb()
+                )
             except Exception as e:
-                return await msg.answer(f"Ошибка создания класса: {e}", reply_markup=back_kb())
+                # сюда попадёт и тот самый TypeError, и любые другие проблемы
+                return await msg.answer(f"❌ Ошибка создания группы: {e}", reply_markup=back_kb())
+
+        # очищаем состояние мастера
         USER_STATE.pop(msg.from_user.id, None)
-        return await msg.answer(f"✅ Класс создан: <b>{name}</b> (TZ={DEFAULT_TZ})", reply_markup=back_kb())
+
+        # Сообщение пользователю + кнопка возврата в главное меню
+        return await msg.answer(
+            f"✅ Группа успешно создана: <b>{name}</b>",
+            reply_markup=back_kb()
+        )
+
+
 
     # ---------- ADD STUDENT (теперь users) ----------
     if mode == "add_student":
@@ -105,6 +135,98 @@ async def on_text(msg: Message):
                 f"Сразу записать в класс?",
                 reply_markup=single_col_kb(rows)
             )
+        # ---------- TEACHER: ADD STUDENT (имя -> выбор группы) ----------
+    if mode == "t_assign_student":
+        if step == 0:
+            data["display_name"] = msg.text.strip()
+            state["step"] = 1
+
+            # Показать список существующих групп
+            async with aiosqlite.connect(DB_PATH) as db:
+                db.row_factory = aiosqlite.Row
+                classes = await fetchall(db, "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC")
+
+            if not classes:
+                USER_STATE.pop(msg.from_user.id, None)
+                return await msg.answer(
+                    "Пока нет групп. Сначала создайте группу, затем повторите добавление ученика.",
+                    reply_markup=back_kb()
+                )
+
+            rows = [(c["name"], f"{CB_T_ASSIGN_PICK_CLS}{c['id']}") for c in classes]
+            return await msg.answer(
+                "Шаг 2/2: выберите группу, в которую добавить ученика:",
+                reply_markup=single_col_kb(rows)
+            )
+            # ---------- TEACHER: EDIT STUDENT FIO ----------
+    if mode == "t_edit_students_fio":
+        new_name = msg.text.strip()
+        if not new_name:
+            rows = [("⬅ Назад", f"{CB_T_EDIT_PICK_STU}{state['student_id']}:{state['class_id']}")]
+            return await msg.answer("❗️ФИО не может быть пустым. Введите корректное ФИО:", reply_markup=single_col_kb(rows))
+
+        student_id = state.get("student_id")
+        class_id = state.get("class_id")
+        async with aiosqlite.connect(DB_PATH) as db:
+            try:
+                await db.execute("UPDATE users SET name=? WHERE UserID=?", (new_name, student_id))
+                await db.commit()
+            except Exception as e:
+                rows = [("⬅ Назад к действиям", f"{CB_T_EDIT_PICK_STU}{student_id}:{class_id}")]
+                USER_STATE.pop(msg.from_user.id, None)
+                return await msg.answer(f"❌ Ошибка обновления ФИО: {e}", reply_markup=single_col_kb(rows))
+
+        USER_STATE.pop(msg.from_user.id, None)
+
+        rows = [
+            ("◀️ Продолжить редактирование этого ученика", f"{CB_T_EDIT_PICK_STU}{student_id}:{class_id}"),
+            ("⬅ Назад к ученикам класса",                 f"{CB_T_EDIT_BACK_STUDENTS}{class_id}"),
+        ]
+        return await msg.answer(
+            f"✅ ФИО обновлено: <b>{new_name}</b>",
+            reply_markup=single_col_kb(rows)
+        )
+        # ---------- TEACHER: GROUP RENAME ----------
+    if mode == "t_group_rename":
+        new_name = msg.text.strip()
+        class_id = state.get("class_id")
+
+        if not new_name:
+            rows = [("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")]
+            return await msg.answer("❗️Название группы не может быть пустым. Введите корректное название:", reply_markup=single_col_kb(rows))
+
+        # Переименуем (с проверкой владельца и UNIQUE имени)
+        async with aiosqlite.connect(DB_PATH) as db:
+            try:
+                cur = await db.execute(
+                    "UPDATE classes SET name=? WHERE id=? AND owner_chat_id=?",
+                    (new_name, class_id, msg.from_user.id)
+                )
+                await db.commit()
+                if cur.rowcount == 0:
+                    USER_STATE.pop(msg.from_user.id, None)
+                    return await msg.answer(
+                        "❌ Группа не найдена или принадлежит другому учителю.",
+                        reply_markup=single_col_kb([("⬅ Назад к списку групп", CB_T_GEDIT_BACK_GROUPS)])
+                    )
+            except aiosqlite.IntegrityError:
+                rows = [("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")]
+                return await msg.answer("❌ Группа с таким названием уже существует. Введите другое имя:", reply_markup=single_col_kb(rows))
+            except Exception as e:
+                rows = [("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")]
+                return await msg.answer(f"❌ Ошибка переименования: {e}", reply_markup=single_col_kb(rows))
+
+        USER_STATE.pop(msg.from_user.id, None)
+        rows = [
+            ("◀️ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}"),
+            ("⬅ Назад к списку групп",      CB_T_GEDIT_BACK_GROUPS),
+        ]
+        return await msg.answer(
+            f"✅ Название группы изменено на: <b>{new_name}</b>",
+            reply_markup=single_col_kb(rows)
+        )
+
+
 
     # ---------- REGISTER ----------
     if mode == "register":
@@ -145,7 +267,7 @@ async def on_text(msg: Message):
                 if not class_row:
                     return await msg.answer("Класс не найден (возможно, был удалён).", reply_markup=back_kb())
 
-                tz = ZoneInfo(class_row["timezone"])
+                tz = ZoneInfo(DEFAULT_TZ)
 
                 await db.execute(
                     "INSERT INTO tasks(class_id, title, description, due_utc, created_utc) VALUES(?, ?, ?, ?, ?)",
@@ -159,15 +281,32 @@ async def on_text(msg: Message):
                 row = await fetchone(db, "SELECT last_insert_rowid() AS id")
                 task_id = row["id"]
 
+                scope = state.get("data", {}).get("scope")
+                selected_students = state.get("data", {}).get("selected_students") or []
+                if scope == "sel" and selected_students:
+                    pairs = [(task_id, sid) for sid in selected_students]
+                    await db.executemany(
+                        "INSERT OR IGNORE INTO task_targets(task_id, student_id) VALUES(?, ?)",
+                        pairs
+                    )
+                    await db.commit()
             await schedule_task_jobs(task_id)
             due_local_str = fmt_dt_local(data["due_utc"], tz)
             USER_STATE.pop(msg.from_user.id, None)
+
+            # Дополняем текст в зависимости от охвата
+            scope = state.get("data", {}).get("scope")
+            extra = ""
+            if scope == "sel":
+                extra = f"\nНазначено выбранным ученикам: <b>{len(selected_students)}</b>"
+
             return await msg.answer(
                 f"✅ Задание создано: <b>{data['title']}</b>\n"
                 f"Класс: <b>{class_row['name']}</b>\n"
-                f"Дедлайн: <b>{due_local_str} {tz.key}</b>\nID: <code>{task_id}</code>",
+                f"Дедлайн: <b>{due_local_str} {tz.key}</b>\n"
+                f"ID: <code>{task_id}</code>{extra}",
                 reply_markup=back_kb()
-            )
+            )           
 
     # ---------- GEN ----------
     if mode == "gen":

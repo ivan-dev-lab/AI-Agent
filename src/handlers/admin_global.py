@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
+from aiogram.filters import BaseFilter
 from zoneinfo import ZoneInfo
 import aiosqlite
 from utils import ensure_authorized, is_global_admin
@@ -20,6 +21,21 @@ from db import (
     create_pending_la, consume_pending_la, get_school_by_id,
     fetchall
 )
+
+# Примитивное FSM для различных сценариев
+GA_STATE: dict[int, dict] = {}
+
+# FSM для активации приглашения ЛА — теперь здесь
+COMMON_STATE: dict[int, dict] = {}
+
+class IsGaOrCommonInput(BaseFilter):
+    async def __call__(self, msg: Message) -> bool:
+        uid = msg.from_user.id
+        st_common = COMMON_STATE.get(uid)
+        if st_common and st_common.get("mode") == "await_la_password":
+            return True
+        st_ga = GA_STATE.get(uid)
+        return bool(st_ga)
 
 
 router = Router()
@@ -387,7 +403,7 @@ async def ga_remove_la(cq: CallbackQuery):
     await ga_edit_la_pick_school(cq)
 
 # --- Обработка текстовых сообщений (все FSM) ---
-@router.message(F.text)
+@router.message(F.text, IsGaOrCommonInput())
 async def handle_ga_text_input(msg: Message):
     user_id = msg.from_user.id
 

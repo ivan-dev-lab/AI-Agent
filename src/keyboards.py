@@ -46,13 +46,12 @@ def teacher_main_kb() -> InlineKeyboardMarkup:
     создать группу, редактировать группу (добавить/удалить), добавить задание, список заданий.
     """
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👨‍🎓 Назначить ученика", callback_data=CB_T_ASSIGN_STUDENT)],
+        [InlineKeyboardButton(text="👨‍🎓 Добавить ученика", callback_data=CB_T_ASSIGN_STUDENT)],
         [InlineKeyboardButton(text="✏️ Редактировать учеников", callback_data=CB_T_EDIT_STUDENTS)],
         [InlineKeyboardButton(text="📁 Создать группу", callback_data=CB_T_CREATE_GROUP)],
         [InlineKeyboardButton(text="⚙️ Редактировать группу (добавить/удалить)", callback_data=CB_T_EDIT_GROUP)],
         [InlineKeyboardButton(text="➕ Добавить задание", callback_data=CB_T_ADD_TASK)],
-        [InlineKeyboardButton(text="📋 Список заданий", callback_data=CB_T_LIST_TASKS)],
-        [InlineKeyboardButton(text="⬅ Назад в главное меню", callback_data=CB_BACK)]
+        [InlineKeyboardButton(text="📋 Список заданий", callback_data=CB_T_LIST_TASKS)]
     ])
 
 

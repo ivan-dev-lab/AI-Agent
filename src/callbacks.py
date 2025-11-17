@@ -13,6 +13,8 @@ CB_ADD_TASK = "add_task"
 CB_LIST_TASKS = "list_tasks"
 CB_GEN = "gen"
 CB_SETTINGS = "settings"
+CB_T_ASSIGN_PICK_CLS = "t_assign_pick_cls:"
+
 
 # Ветки выбора (оставляем, если используются)
 CB_ENROLL_PICK_STU = "enroll_pick_stu:"       # +<student_id>
@@ -84,3 +86,52 @@ CB_T_CREATE_GROUP = "t_create_group"       # создать группу
 CB_T_EDIT_GROUP = "t_edit_group"           # редактировать группу (добав/удал)
 CB_T_ADD_TASK = "t_add_task"               # добавить задание
 CB_T_LIST_TASKS = "t_list_tasks"           # список заданий
+CB_T_ASSIGN_PICK_CLS = "t_assign_pick_cls:"   # +<class_id>
+
+# Выбор класса для редактирования
+CB_T_EDIT_PICK_CLS = "t_edit_pick_cls:"          # +<class_id>
+
+# Выбор ученика внутри класса
+CB_T_EDIT_PICK_STU = "t_edit_pick_stu:"          # +<student_id>:<class_id>
+
+# Действие над учеником
+CB_T_EDIT_ACTION = "t_edit_action:"               # +<action>:<student_id>:<class_id>
+# action ∈ {"fio", "group"}
+
+# Выбор новой группы (для переноса ученика)
+CB_T_EDIT_PICK_NEWCLS = "t_edit_pick_newcls:"     # +<new_class_id>:<student_id>:<old_class_id>
+
+# «Назад» внутри мастера
+CB_T_EDIT_BACK_CLASSES  = "t_edit_back_classes"   # назад к списку классов
+CB_T_EDIT_BACK_STUDENTS = "t_edit_back_students:" # +<class_id> — назад к списку учеников
+CB_T_EDIT_BACK_ACTIONS  = "t_edit_back_actions:"  # +<student_id>:<class_id> — назад к действиям
+
+# --- редактирование группы (group edit) ---
+CB_T_GEDIT_PICK_CLS       = "t_gedit_pick_cls:"
+CB_T_GEDIT_ACTION         = "t_gedit_action:"
+CB_T_GDEL_PICK_STU        = "t_gdel_pick_stu:"
+CB_T_GEDIT_BACK_GROUPS    = "t_gedit_back_groups"
+CB_T_GEDIT_BACK_ACTIONS   = "t_gedit_back_actions:"
+CB_T_GEDIT_BACK_STUDENTS  = "t_gedit_back_students:"
+CB_T_GADD_PICK_STU        = "t_gadd_pick_stu:"   # +<student_id>:<class_id>
+
+
+# --- мастер добавления задания ---
+CB_T_TASK_PICK_CLS     = "t_task_pick_cls:"          # +<class_id>
+CB_T_TASK_SCOPE        = "t_task_scope:"             # +<scope>:<class_id> ; scope ∈ {"cls","sel"}
+CB_T_TASK_PICK_STU     = "t_task_pick_stu:"          # +<student_id>:<class_id> (переключатель)
+CB_T_TASK_PICK_DONE    = "t_task_pick_done:"         # +<class_id> (завершить выбор учеников)
+
+CB_T_TASK_BACK_CLASSES = "t_task_back_classes"       # назад к списку групп
+CB_T_TASK_BACK_SCOPE   = "t_task_back_scope:"        # +<class_id> — назад к выбору охвата
+CB_T_TASK_BACK_STUS    = "t_task_back_stus:"         # +<class_id> — назад к списку учеников
+
+
+# --- Просмотр заданий учителем ---
+CB_T_VTASK_PICK_CLS      = "t_vtask_pick_cls:"       # +<class_id>
+CB_T_VTASK_PICK_STU      = "t_vtask_pick_stu:"       # +<student_id>:<class_id>
+CB_T_VTASK_OPEN          = "t_vtask_open:"           # +<task_id>:<student_id>:<class_id>
+
+CB_T_VTASK_BACK_CLASSES  = "t_vtask_back_classes"    # назад к списку групп
+CB_T_VTASK_BACK_STUDENTS = "t_vtask_back_students:"  # +<class_id> — назад к ученикам
+CB_T_VTASK_BACK_TASKS    = "t_vtask_back_tasks:"     # +<student_id>:<class_id> — назад к списку задач ученика

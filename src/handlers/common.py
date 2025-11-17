@@ -7,6 +7,7 @@ from typing import Optional
 from keyboards import main_menu_kb, ga_main_kb, back_kb, InlineKeyboardMarkup, InlineKeyboardButton
 from utils import ensure_authorized, is_global_admin
 from db import consume_pending_la, get_school_by_id
+from db import consume_pending_la, get_school_by_id, consume_pending_student
 from config import DB_PATH
 import aiosqlite
 
@@ -96,8 +97,31 @@ async def cmd_start(msg: Message, command: CommandObject):
             reply_markup=_cancel_kb()
         )
         return
+    elif arg and arg.startswith("stu_"):
+        # Активация приглашения ученика по токену
+        token = arg.split("stu_", 1)[1]
+        result = await consume_pending_student(token, msg.from_user.id)
+        if not result:
+            await msg.answer("❌ Приглашение недействительно или уже использовано.")
+            return await _show_main_for(msg.from_user.id, msg)
 
-    await _show_main_for(msg.from_user.id, msg)
+        class_id, display_name = result
+
+        # Получим имя класса для сообщения
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT name FROM classes WHERE id = ?", (class_id,))
+            row = await cur.fetchone()
+            class_name = row["name"] if row else "неизвестный класс"
+
+        await msg.answer(
+            "🎉 <b>Добро пожаловать!</b>\n\n"
+            "Вы зарегистрированы как <b>ученик</b>.\n"
+            f"👤 Имя в системе: <b>{display_name}</b>\n"
+            f"📁 Группа: <b>{class_name}</b>"
+        )
+    return await _show_main_for(msg.from_user.id, msg)
+
 
 
 @router.message(Command("help"))
