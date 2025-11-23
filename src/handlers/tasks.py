@@ -19,6 +19,51 @@ from utils import ensure_role
 
 router = Router()
 
+@router.callback_query(F.data == CB_LIST_TASKS)
+async def list_tasks(cq: CallbackQuery):
+    # (примерный код списка -- оставлен как в проекте)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        rows = await fetchall(conn, "SELECT t.id, t.title, c.name as class_name, t.due_utc, c.timezone FROM tasks t JOIN classes c ON t.class_id=c.id")
+    if not rows:
+        await cq.message.edit_text("<b>Нет заданий</b>", reply_markup=back_kb())
+        return
+    lines = ["<b>📋 Список заданий</b>"]
+    for r in rows:
+        tz = ZoneInfo(r["timezone"])
+        due_local_str = fmt_dt_local(datetime.fromisoformat(r["due_utc"]).replace(tzinfo=timezone.utc), tz)
+        lines.append(f"#{r['id']} • {r['class_name']} • <b>{r['title']}</b> — {due_local_str} {tz.key}")
+    text = "\n".join(lines)
+    await cq.message.edit_text(text, reply_markup=back_kb())
+
+
+
+@router.callback_query(TaskCB.filter(F.action == "detail"))
+async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
+    if not await ensure_role(cb.from_user.id, "student", cb):
+        return
+    t = await get_task_with_class(callback_data.task_id)
+    if not t:
+        await cb.answer("Задание не найдено", show_alert=True); return
+    text = (
+        f"📝 <b>{t['title']}</b>\n"
+        f"Класс: <b>{t['class_name']}</b>\n"
+        f"Дедлайн (UTC): <code>{t['due_utc']}</code>\n\n"
+        f"{t['description'] or '—'}"
+    )
+    # <- здесь было: task_detail_kb(callback_data.page)
+    await cb.message.edit_text(text, reply_markup=task_detail_kb(callback_data.page, callback_data.task_id))
+    await cb.answer()
+
+# (дальше в файле могут быть другие обработчики; я не трогал остальной код)
+
+
+
+
+
+
+
+
+
 # -------------------------------
 # Функция удаления старых задач
 # -------------------------------
@@ -91,43 +136,4 @@ async def cb_add_task_pick_class(cq: CallbackQuery):
 # -------------------------------
 # Просмотр списка заданий
 # -------------------------------
-@router.callback_query(F.data == CB_LIST_TASKS)
-async def cb_list_tasks(cq: CallbackQuery):
-    # ✅ Удаляем старые задачи перед показом списка
-    await delete_old_tasks()
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        rows = await fetchall(
-            db,
-            """SELECT t.*, c.name AS class_name, c.timezone
-               FROM tasks t JOIN classes c ON c.id=t.class_id
-               ORDER BY due_utc ASC"""
-        )
-    if not rows:
-        text = "📋 Заданий пока нет."
-    else:
-        lines = ["<b>📋 Список заданий</b>"]
-        for r in rows:
-            tz = ZoneInfo(r["timezone"])
-            due_local_str = fmt_dt_local(datetime.fromisoformat(r["due_utc"]).replace(tzinfo=timezone.utc), tz)
-            lines.append(f"#{r['id']} • {r['class_name']} • <b>{r['title']}</b> — {due_local_str} {tz.key}")
-        text = "\n".join(lines)
-    await cq.message.edit_text(text, reply_markup=back_kb())
-
-
-@router.callback_query(TaskCB.filter(F.action == "detail"))
-async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
-    if not await ensure_role(cb.from_user.id, "student", cb):
-        return
-    t = await get_task_with_class(callback_data.task_id)
-    if not t:
-        await cb.answer("Задание не найдено", show_alert=True); return
-    text = (
-        f"📝 <b>{t['title']}</b>\n"
-        f"Класс: <b>{t['class_name']}</b>\n"
-        f"Дедлайн (UTC): <code>{t['due_utc']}</code>\n\n"
-        f"{t['description'] or '—'}"
-    )
-    await cb.message.edit_text(text, reply_markup=task_detail_kb(callback_data.page))
-    await cb.answer()

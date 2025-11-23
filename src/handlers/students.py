@@ -7,14 +7,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from zoneinfo import ZoneInfo
 
-
 from callbacks import (
-    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS, 
+    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS,
     CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK, StudentCB
 )
 from keyboards import student_menu_kb, tasks_list_kb
 from db import (
-    list_tasks_for_student, list_classes_for_student, 
+    list_tasks_for_student, list_classes_for_student,
     list_teachers_for_student, upcoming_tasks_for_student
 )
 # from src.utils import send_to_neural_api
@@ -54,24 +53,25 @@ async def student_tasks_entry(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=tasks_list_kb(tasks, page, has_next))
     await cq.answer()
 
-# Открытие конкретного задания (используем данные из списка)
+# Открытие конкретного задания
 @router.callback_query(F.data.startswith("open_task_"))
 async def open_task(callback: CallbackQuery, state: FSMContext):
     if not await ensure_role(callback.from_user.id, "student", callback):
         return
-        
+
     task_id = int(callback.data.split("_")[-1])
-    
-    # Получаем список заданий и находим нужное задание по ID
+
+    # Получаем список заданий и находим нужное
     tasks, _ = await list_tasks_for_student(callback.from_user.id, limit=100, offset=0)
     task = next((t for t in tasks if t['id'] == task_id), None)
-    
+
     if not task:
         await callback.message.answer("Задание не найдено.")
         return
 
-    # Клавиатура с кнопкой нейросети и назад
+    # Клавиатура с двумя новыми кнопками
     kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🧑‍🏫 Спросить у учителя", callback_data=f"ask_teacher_{task_id}")],
         [InlineKeyboardButton(text="🤖 Спросить у нейросети", callback_data=f"ask_ai_{task_id}")],
         [InlineKeyboardButton(text="🔙 Назад к заданиям", callback_data=CB_STU_TASKS)]
     ])
@@ -83,12 +83,25 @@ async def open_task(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-# Начало запроса к нейросети
+# Обработчик кнопки «Спросить у учителя» (заглушка)
+@router.callback_query(F.data.startswith("ask_teacher_"))
+async def ask_teacher(callback: CallbackQuery):
+    if not await ensure_role(callback.from_user.id, "student", callback):
+        return
+
+    task_id = int(callback.data.split("_")[-1])
+    await callback.message.answer(
+        f"🧑‍🏫 Отправляю вопрос учителю по заданию #{task_id}...\n\n"
+        "Ожидайте ответа — учитель скоро свяжется с вами."
+    )
+    await callback.answer()
+
+# Начало диалога с нейросетью
 @router.callback_query(F.data.startswith("ask_ai_"))
 async def ask_ai(callback: CallbackQuery, state: FSMContext):
     if not await ensure_role(callback.from_user.id, "student", callback):
         return
-        
+
     task_id = int(callback.data.split("_")[-1])
     await state.update_data(selected_task_id=task_id)
 
@@ -96,25 +109,31 @@ async def ask_ai(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AskAIState.waiting_for_query)
     await callback.answer()
 
-# # Обработка запроса к нейросети
-# @router.message(AskAIState.waiting_for_query)
-# async def process_ai_query(message: Message, state: FSMContext):
-#     user_data = await state.get_data()
-#     task_id = user_data.get("selected_task_id")
+# Обработка ввода пользователя и ответ нейросети (заглушка)
+@router.message(AskAIState.waiting_for_query)
+async def process_ai_query(message: Message, state: FSMContext):
+    user_data = await state.get_data()
+    task_id = user_data.get("selected_task_id")
 
-#     query_text = message.text.strip()
-#     await message.answer("⏳ Отправляю запрос нейросети...")
+    query_text = message.text.strip()
+    if not query_text:
+        await message.answer("Пожалуйста, введите корректный запрос.")
+        return
 
-#     try:
-#         response = await send_to_neural_api(query_text, task_id, message.from_user.id)
-#         await message.answer(f"🤖 Ответ нейросети:\n\n{response}")
-#     except Exception as e:
-#         logger.exception("Ошибка при обращении к нейросети: %s", e)
-#         await message.answer("⚠️ Произошла ошибка при обращении к нейросети.")
+    await message.answer("⏳ Нейросеть обрабатывает ваш запрос...")
 
-#     await state.clear()
+    # Заглушка ответа нейросети
+    mock_response = (
+        f"Я — тестовая версия нейросети.\n\n"
+        f"Вы задали вопрос: *{query_text}*\n\n"
+        f"По заданию #{task_id} я могу предположить следующее:\n\n"
+        "Это пример ответа от нейросети. В реальной версии сюда придёт ответ от API."
+    )
 
-# Остальные функции (преподаватели, группы, расписание, информация) остаются без изменений
+    await message.answer(mock_response, parse_mode="Markdown")
+    await state.clear()
+
+# Преподаватели
 @router.callback_query(F.data == CB_STU_TEACHERS)
 async def student_teachers(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -132,6 +151,7 @@ async def student_teachers(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
 
+# Группы
 @router.callback_query(F.data == CB_STU_GROUPS)
 async def student_groups(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -148,6 +168,7 @@ async def student_groups(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
 
+# Расписание / напоминания
 @router.callback_query(F.data == CB_STU_SCHEDULE)
 async def student_schedule(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -170,6 +191,7 @@ async def student_schedule(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=kb)
     await cq.answer()
 
+# Информация
 @router.callback_query(F.data == CB_STU_INFO)
 async def student_info(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -184,5 +206,6 @@ async def student_info(cq: CallbackQuery):
         [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
     ])
-    await cq.message.edit_text(text, reply_markup=kb)
+    await cq.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await cq.answer()
+

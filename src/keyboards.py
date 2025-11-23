@@ -165,4 +165,3 @@ def task_detail_kb(back_page: int | None, task_id: int) -> InlineKeyboardMarkup:
     kb.button(text="🏠 Главное меню", callback_data=CB_BACK)
     kb.adjust(1)
     return kb.as_markup()
-
