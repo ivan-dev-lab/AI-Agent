@@ -106,7 +106,6 @@ def student_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🏫 Мои группы",         callback_data=CB_STU_GROUPS)],
         [InlineKeyboardButton(text="📆 Расписание / напоминания", callback_data=CB_STU_SCHEDULE)],
         [InlineKeyboardButton(text="ℹ️ Информация",         callback_data=CB_STU_INFO)],
-        [InlineKeyboardButton(text="🏠 Главное меню",       callback_data=CB_BACK)],
     ])
 
 # список задач со входом в подробности (кнопки-строки + пагинация)

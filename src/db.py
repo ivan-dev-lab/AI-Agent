@@ -369,3 +369,189 @@ async def upcoming_tasks_for_student(student_id: int, limit: int = 10) -> list:
             """,
             (student_id, limit)
         )
+
+
+async def seed_test_data(
+    global_admin_ids: Optional[Iterable[int]] = None,
+    user_records: Optional[Iterable[Tuple[int, str, str, int]]] = None,
+) -> None:
+    """
+    Заполняет БД тестовыми данными.
+
+    :param global_admin_ids:
+        Итерация ID пользователей, которых нужно добавить в таблицу
+        глобальных администраторов `administrators(AdminID)`.
+
+    :param user_records:
+        Итерация кортежей пользователей для таблицы `users`:
+        (user_id, name, post, active)
+        где:
+            user_id: int  - Telegram ID пользователя
+            name: str     - отображаемое имя
+            post: str     - должность/роль ('student', 'teacher', 'local_admin', ...)
+            active: int   - статус (обычно 1 для активного пользователя)
+    """
+    now = datetime.now(timezone.utc).isoformat()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        # --- 1. Пользователи и глобальные администраторы ---
+        if user_records:
+            await db.executemany(
+                """
+                INSERT OR IGNORE INTO users(UserID, name, post, active)
+                VALUES (?, ?, ?, ?)
+                """,
+                list(user_records),
+            )
+
+        if global_admin_ids:
+            await db.executemany(
+                """
+                INSERT OR IGNORE INTO administrators(AdminID)
+                VALUES (?)
+                """,
+                [(uid,) for uid in global_admin_ids],
+            )
+
+        # --- 2. Тестовые учебные заведения (schools) ---
+        schools_data = [
+            ("Школа №1", "Шк1", "Город, улица 1", "Europe/Moscow"),
+            ("Школа №2", "Шк2", "Город, улица 2", "Europe/Moscow"),
+        ]
+        school_ids: List[int] = []
+
+        for name, short_name, address, tz in schools_data:
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO schools(name, short_name, address, timezone, created_utc, updated_utc)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (name, short_name, address, tz, now, now),
+            )
+            row = await db.execute("SELECT id FROM schools WHERE name = ?", (name,))
+            school_row = await row.fetchone()
+            if school_row:
+                school_ids.append(school_row["id"])
+
+        # --- 3. Привязка ролей по школам (если есть такие пользователи) ---
+        # локальные админы
+        cur = await db.execute("SELECT UserID FROM users WHERE post = 'local_admin'")
+        la_ids = [r["UserID"] for r in await cur.fetchall()]
+
+        # учителя
+        cur = await db.execute("SELECT UserID FROM users WHERE post = 'teacher'")
+        teacher_ids = [r["UserID"] for r in await cur.fetchall()]
+
+        # ученики
+        cur = await db.execute("SELECT UserID FROM users WHERE post = 'student'")
+        student_ids = [r["UserID"] for r in await cur.fetchall()]
+
+        # привязки локальных админов к первой школе (если есть)
+        if school_ids and la_ids:
+            await db.executemany(
+                """
+                INSERT OR IGNORE INTO school_local_admins(school_id, user_id)
+                VALUES (?, ?)
+                """,
+                [(school_ids[0], uid) for uid in la_ids],
+            )
+
+        # привязки учителей ко всем школам (равномерно)
+        for idx, tid in enumerate(teacher_ids):
+            if not school_ids:
+                break
+            school_id = school_ids[idx % len(school_ids)]
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO school_teachers(school_id, user_id)
+                VALUES (?, ?)
+                """,
+                (school_id, tid),
+            )
+
+        # привязки учеников ко всем школам (равномерно)
+        for idx, sid in enumerate(student_ids):
+            if not school_ids:
+                break
+            school_id = school_ids[idx % len(school_ids)]
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO school_students(school_id, user_id)
+                VALUES (?, ?)
+                """,
+                (school_id, sid),
+            )
+
+        # --- 4. Тестовые классы и задания ---
+        classes_data = [
+            ("9А класс",  1000000001, "Europe/Moscow"),
+            ("10Б класс", 1000000002, "Europe/Moscow"),
+        ]
+        class_ids: List[int] = []
+
+        for name, owner_chat_id, tz in classes_data:
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO classes(name, owner_chat_id, timezone)
+                VALUES (?, ?, ?)
+                """,
+                (name, owner_chat_id, tz),
+            )
+            row = await db.execute("SELECT id FROM classes WHERE name = ?", (name,))
+            class_row = await row.fetchone()
+            if class_row:
+                class_ids.append(class_row["id"])
+
+        # Запишем всех студентов в первый доступный класс
+        if class_ids and student_ids:
+            await db.executemany(
+                """
+                INSERT OR IGNORE INTO enrollments(student_id, class_id)
+                VALUES (?, ?)
+                """,
+                [(sid, class_ids[0]) for sid in student_ids],
+            )
+
+        # Пара тестовых заданий для каждого класса
+        for cid in class_ids:
+            await db.execute(
+                """
+                INSERT INTO tasks(class_id, title, description, due_utc, created_utc)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    cid,
+                    "Домашнее задание №1",
+                    "Сделать упражнение 1–10.",
+                    datetime.now(timezone.utc).isoformat(),
+                    now,
+                ),
+            )
+            await db.execute(
+                """
+                INSERT INTO tasks(class_id, title, description, due_utc, created_utc)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    cid,
+                    "Контрольная работа",
+                    "Подготовиться к контрольной.",
+                    datetime.now(timezone.utc).isoformat(),
+                    now,
+                ),
+            )
+
+        await db.commit()
+
+import asyncio
+
+# asyncio.run(
+#     seed_test_data(
+#     user_records=[
+#         (651213276, "Иван", "student", 1),
+#     ],
+# )
+# )
+
