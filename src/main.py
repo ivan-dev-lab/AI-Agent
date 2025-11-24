@@ -7,22 +7,24 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN, default_props
 from db import ensure_db
+
 from handlers.common import router as common_router
 from handlers.enroll import router as enroll_router
 from handlers.tasks import router as tasks_router
 from handlers.students import router as students_router
 from handlers.classes import router as classes_router
 from handlers.gen import router as gen_router
-from handlers.text import router as text_router
-from handlers.admin_global import router as ga_router  # NEW
+from handlers.admin_global import router as ga_router
+from handlers.teacher import router as teacher_router
+from handlers.text import router as text_router  # наш текстовый роутер
 from handlers.local_admin import router as la_router  # LOCAL ADMIN
 from utils import ensure_authorized, is_local_admin
 
 dotenv.load_dotenv()
+
 
 async def main():
     await ensure_db()
@@ -30,19 +32,26 @@ async def main():
     bot = Bot(token=BOT_TOKEN, default=default_props)
     dp = Dispatcher()
 
-    # routers
+    # Подключаем все роутеры
     dp.include_router(common_router)
-    dp.include_router(ga_router)        # NEW: меню глобального администратора
+    dp.include_router(ga_router)
     dp.include_router(la_router)        # NEW: меню локального администратора
     dp.include_router(enroll_router)
     dp.include_router(tasks_router)
     dp.include_router(students_router)
     dp.include_router(classes_router)
     dp.include_router(gen_router)
+    dp.include_router(teacher_router)
+
+    # ТЕКСТОВЫЙ — САМЫМ ПОСЛЕДНИМ
     dp.include_router(text_router)
 
     print("Bot is running. Press Ctrl+C to stop.")
-    await dp.start_polling(bot)
+    await dp.start_polling(
+        bot,
+        allowed_updates=dp.resolve_used_update_types()
+    )
+
 
 if __name__ == "__main__":
     try:

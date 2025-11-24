@@ -32,8 +32,7 @@ async def ensure_db() -> None:
             CREATE TABLE IF NOT EXISTS classes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
-                owner_chat_id INTEGER NOT NULL,
-                timezone TEXT NOT NULL
+                owner_chat_id INTEGER NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS tasks (
@@ -131,6 +130,24 @@ async def ensure_db() -> None:
                 created_utc TEXT NOT NULL,
                 FOREIGN KEY(school_id) REFERENCES schools(id) ON DELETE CASCADE
             );
+            /* Приглашения учеников (для ссылок-приглашений по start param) */
+            CREATE TABLE IF NOT EXISTS pending_students (
+                token        TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                class_id     INTEGER NOT NULL,
+                created_by   INTEGER,
+                created_utc  TEXT NOT NULL,
+                FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS task_targets (
+                task_id    INTEGER NOT NULL,
+                student_id INTEGER NOT NULL,
+                PRIMARY KEY (task_id, student_id),
+                FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY(student_id) REFERENCES users(UserID) ON DELETE CASCADE
+            );
+
+            
             """
         )
         await db.commit()
@@ -607,7 +624,64 @@ async def list_local_admins_for_la(la_user_id: int) -> list[dict]:
         )
         return [dict(r) for r in rows]
 
-    
+
+# --- Pending Students (инвайты для учеников) ---
+import secrets
+import string
+
+async def create_pending_student(display_name: str, class_id: int, created_by: int | None = None) -> str:
+    """Создаёт приглашение ученика и возвращает токен."""
+    token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO pending_students(token, display_name, class_id, created_by, created_utc)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (token, display_name, class_id, created_by, now)
+        )
+        await db.commit()
+    return token
+
+async def consume_pending_student(token: str, user_id: int) -> tuple[int, str] | None:
+    """Активирует приглашение ученика.
+    - Добавляет пользователя в users с ролью 'student' (если его там нет)
+    - Записывает в выбранный класс (enrollments)
+    - Удаляет приглашение
+    Возвращает (class_id, display_name) при успехе, иначе None.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await fetchone(db, "SELECT display_name, class_id FROM pending_students WHERE token = ?", (token,))
+        if not row:
+            return None
+
+        display_name = row["display_name"]
+        class_id = row["class_id"]
+
+        # Добавляем/обновляем пользователя
+        await db.execute(
+            "INSERT OR IGNORE INTO users(UserID, name, post, active) VALUES (?, ?, 'student', 1)",
+            (user_id, display_name)
+        )
+        await db.execute(
+            "UPDATE users SET name = COALESCE(name, ?) WHERE UserID = ?",
+            (display_name, user_id)
+        )
+
+        # Запишем в класс
+        await db.execute(
+            "INSERT OR IGNORE INTO enrollments(student_id, class_id) VALUES (?, ?)",
+            (user_id, class_id)
+        )
+
+        # Удаляем приглашение
+        await db.execute("DELETE FROM pending_students WHERE token = ?", (token,))
+        await db.commit()
+
+        return (class_id, display_name)
+
 # --- ЗАДАНИЯ / КЛАССЫ / ПРЕПОДАВАТЕЛИ ДЛЯ УЧЕНИКА -----------------------------
 import aiosqlite
 from typing import List, Tuple, Optional
