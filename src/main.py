@@ -2,6 +2,9 @@
 import asyncio
 import os
 import dotenv
+import sys
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -16,6 +19,8 @@ from handlers.classes import router as classes_router
 from handlers.gen import router as gen_router
 from handlers.text import router as text_router
 from handlers.admin_global import router as ga_router  # NEW
+from handlers.local_admin import router as la_router  # LOCAL ADMIN
+from utils import ensure_authorized, is_local_admin
 
 dotenv.load_dotenv()
 
@@ -28,6 +33,7 @@ async def main():
     # routers
     dp.include_router(common_router)
     dp.include_router(ga_router)        # NEW: меню глобального администратора
+    dp.include_router(la_router)        # NEW: меню локального администратора
     dp.include_router(enroll_router)
     dp.include_router(tasks_router)
     dp.include_router(students_router)

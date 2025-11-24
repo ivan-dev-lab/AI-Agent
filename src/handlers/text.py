@@ -15,7 +15,7 @@ from utils import fmt_dt_local
 from scheduler_jobs import schedule_task_jobs
 from callbacks import (
     CB_STU_AFTER_ADD_SKIP,
-    CB_ENROLL_PICK_CLS,
+    CB_ENROLL_PICK_CLS, CB_LA_ASSIGN_PICK_CLS,
 )
 
 # простой in-memory FSM, как и было в проекте
@@ -95,6 +95,33 @@ async def on_text(msg: Message):
                     f"Пока нет классов — создайте класс и запишите ученика позже.",
                     reply_markup=back_kb()
                 )
+
+    # ---------- LOCAL ADMIN: INVITE STUDENT (имя -> выбор класса) ----------
+    if mode == "la_assign_student":
+        if step == 0:
+            data["display_name"] = msg.text.strip()
+            state["step"] = 1
+
+            # Показываем список всех классов (как в add_student/t_assign_student)
+            async with aiosqlite.connect(DB_PATH) as db:
+                db.row_factory = aiosqlite.Row
+                classes = await fetchall(
+                    db,
+                    "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC"
+                )
+
+            if not classes:
+                USER_STATE.pop(msg.from_user.id, None)
+                return await msg.answer(
+                    "Пока нет классов. Сначала создайте класс, затем повторите добавление ученика.",
+                    reply_markup=back_kb()
+                )
+
+            rows = [(c["name"], f"{CB_LA_ASSIGN_PICK_CLS}{c['id']}") for c in classes]
+            return await msg.answer(
+                "Шаг 2/2: выберите класс, в который добавить ученика:",
+                reply_markup=single_col_kb(rows)
+            )
 
             # показать список классов + «⏭ Пропустить»
             USER_STATE.pop(msg.from_user.id, None)
