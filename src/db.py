@@ -495,6 +495,29 @@ async def create_student_for_school(user_id: int, la_user_id: int) -> bool:
         except Exception:
             return False
         
+async def create_teacher_for_school(user_id: int, la_user_id: int) -> bool:
+    """Добавляет пользователя как учителя в школу(ы) локального админа."""
+    school_ids = await _get_school_ids_for_la(la_user_id)
+    if not school_ids:
+        return False
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            # Добавляем пользователя в users, если его ещё нет
+            await db.execute(
+                "INSERT OR IGNORE INTO users(UserID, post, active) VALUES (?, 'teacher', 1)",
+                (user_id,)
+            )
+            # Привязываем к школам ЛА
+            for sid in school_ids:
+                await db.execute(
+                    "INSERT OR IGNORE INTO school_teachers(school_id, user_id) VALUES (?, ?)",
+                    (sid, user_id)
+                )
+            await db.commit()
+            return True
+        except Exception:
+            return False
+       
     
 
 

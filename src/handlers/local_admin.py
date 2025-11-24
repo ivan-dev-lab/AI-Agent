@@ -57,6 +57,21 @@ async def cb_la_menu(cq: CallbackQuery):
         "• 📚 <b>Информационные</b> — просмотр списков"
     )
     await cq.message.edit_text(text, reply_markup=la_panel_kb())
+@router.callback_query(F.data == CB_LA_BACK_TO_CORE)
+async def cb_la_back_to_core(cq: CallbackQuery):
+    """Возврат в панель локального администратора (разделы)."""
+    if not await ensure_authorized(cq.from_user.id, cq):
+        return
+    if not await is_local_admin(cq.from_user.id):
+        return await cq.answer("Недостаточно прав", show_alert=True)
+
+    text = (
+        "🏫 <b>Панель локального администратора</b>\n\n"
+        "Выберите раздел:\n"
+        "• 🧱 <b>Основные</b> — назначение и редактирование\n"
+        "• 📚 <b>Информационные</b> — просмотр списков"
+    )
+    await cq.message.edit_text(text, reply_markup=la_panel_kb())
 
 
 # ==========================================================
