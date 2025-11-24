@@ -68,6 +68,7 @@ CB_LA_LIST_STUDENTS = "la_list_students"
 CB_LA_LIST_LOCAL_ADMINS = "la_list_local_admins"
 CB_LA_BACK_TO_CORE = "la_back_to_core"
 
+CB_LA_ASSIGN_PICK_CLS = "la_assign_pick_cls:"   # +<class_id> при выборе класса
 class StudentCB(CallbackData, prefix="student"):
     action: str              # "menu" | "tasks"
     page: int | None = None  # страница списка (пагинация)

@@ -14,8 +14,9 @@ from keyboards import (
     InlineKeyboardButton,
 )
 from utils import ensure_authorized, is_global_admin, has_post
-from db import consume_pending_la, get_school_by_id
+from db import consume_pending_la, get_school_by_id, consume_pending_student
 from config import DB_PATH
+
 
 from callbacks import CB_STU_MENU
 
@@ -72,34 +73,54 @@ async def cb_cancel_activation(cq: CallbackQuery):
 
 @router.message(Command("start"))
 async def cmd_start(msg: Message, command: CommandObject):
-    # если есть аргумент (например, приглашение ЛА) — логика остаётся,
-    # в конце всё равно выводим меню по роли
-    arg = command.args
+    arg = command.args  # то, что идёт после /start
+
+    # 1️⃣ Приглашение локального администратора (числовой код)
     if arg and arg.isdigit():
-        target_user_id = int(arg)
-        if target_user_id != msg.from_user.id:
-            await msg.answer("❌ Вы не тот пользователь.\nЭто приглашение предназначено для другого аккаунта.")
-            return
+        school_id = await consume_pending_la(msg.from_user.id, arg)
+        if not school_id:
+            await msg.answer("❌ Приглашение недействительно или уже использовано.")
+            return await _show_main_for(msg.from_user.id, msg)
 
-        async with aiosqlite.connect(DB_PATH) as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT 1 FROM pending_local_admins WHERE user_id = ?", (target_user_id,)
-            )
-            row = await cursor.fetchone()
-            if not row:
-                await msg.answer("❌ Для вас нет активного приглашения.")
-                await _show_main_for(msg.from_user.id, msg)
-                return
+        school = await get_school_by_id(school_id)
+        title = school["name"] if school else f"ID {school_id}"
 
-        # передача управления FSM для активации ЛА — без изменений
-        from handlers.admin_global import COMMON_STATE
-        COMMON_STATE[msg.from_user.id] = {"mode": "await_la_password"}
         await msg.answer(
-            "🔐 Обнаружено приглашение!\nПожалуйста, введите <b>пароль</b>, полученный от глобального администратора:",
-            reply_markup=_cancel_kb()
+            f"🎉 Вы успешно привязаны как локальный администратор к учебному заведению:\n<b>{title}</b>",
+            reply_markup=back_kb()
         )
         return
+
+    # 2️⃣ Приглашение ученика по токену stu_xxx
+    elif arg and arg.startswith("stu_"):
+        # Активация приглашения ученика по токену
+        token = arg.split("stu_", 1)[1]
+        result = await consume_pending_student(token, msg.from_user.id)
+        if not result:
+            await msg.answer("❌ Приглашение недействительно или уже использовано.")
+            return await _show_main_for(msg.from_user.id, msg)
+
+        class_id, display_name = result
+
+        # Получаем имя класса
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT name FROM classes WHERE id = ?", (class_id,))
+            row = await cur.fetchone()
+            class_name = row["name"] if row else "неизвестный класс"
+
+        await msg.answer(
+            "🎉 <b>Добро пожаловать!</b>\n\n"
+            "Вы зарегистрированы как <b>ученик</b>.\n"
+            f"👤 Имя в системе: <b>{display_name}</b>\n"
+            f"📁 Группа: <b>{class_name}</b>",
+            reply_markup=back_kb()
+        )
+        return
+
+    # 3️⃣ Обычный /start без спец.параметров — просто показываем главное меню
+    await _show_main_for(msg.from_user.id, msg)
+
 
     # обычный старт — показываем меню по роли
     await _show_main_for(msg.from_user.id, msg)

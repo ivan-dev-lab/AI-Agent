@@ -150,8 +150,7 @@ def task_detail_kb(back_page: int | None) -> InlineKeyboardMarkup:
 def la_panel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🧱 Основные", callback_data=CB_LA_SEC_CORE)],
-        [InlineKeyboardButton(text="📚 Информационные", callback_data=CB_LA_SEC_INFO)],
-        [InlineKeyboardButton(text="🏁 В главное меню", callback_data=CB_BACK)],
+        [InlineKeyboardButton(text="📚 Информационные", callback_data=CB_LA_SEC_INFO)]
     ])
 
 
@@ -161,7 +160,7 @@ def la_core_kb() -> InlineKeyboardMarkup:
         ("👨‍🎓 Назначить ученика", CB_LA_ASSIGN_STUDENT),
         ("✏️ Редактировать учителей", CB_LA_EDIT_TEACHERS),
         ("✏️ Редактировать учеников", CB_LA_EDIT_STUDENTS),
-        ("⬅ Назад к разделам", CB_LA_BACK_TO_CORE),
+        ("⬅ Назад к разделам", CB_LA_BACK_TO_CORE)
     ]
     return single_col_kb(rows)
 
@@ -170,8 +169,8 @@ def la_info_kb() -> InlineKeyboardMarkup:
     rows = [
         ("📋 Список учителей", CB_LA_LIST_TEACHERS),
         ("📋 Список учеников", CB_LA_LIST_STUDENTS),
-        ("👥 Локальные администраторы", CB_LA_LIST_LOCAL_ADMINS),
-        ("⬅ Назад к разделам", CB_LA_BACK_TO_CORE),
+        ("📋 Список локальных админов", CB_LA_LIST_LOCAL_ADMINS),
+        ("⬅ Назад к разделам", CB_LA_BACK_TO_CORE)
     ]
     return single_col_kb(rows)
 
