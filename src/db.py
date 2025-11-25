@@ -502,12 +502,10 @@ async def create_teacher_for_school(user_id: int, la_user_id: int) -> bool:
         return False
     async with aiosqlite.connect(DB_PATH) as db:
         try:
-            # Добавляем пользователя в users, если его ещё нет
             await db.execute(
                 "INSERT OR IGNORE INTO users(UserID, post, active) VALUES (?, 'teacher', 1)",
                 (user_id,)
             )
-            # Привязываем к школам ЛА
             for sid in school_ids:
                 await db.execute(
                     "INSERT OR IGNORE INTO school_teachers(school_id, user_id) VALUES (?, ?)",
@@ -556,10 +554,6 @@ async def get_pending_teachers(la_user_id: int):
 # ---------------------------------------------------------------------------
 
 async def _get_school_ids_for_la(la_user_id: int) -> list[int]:
-    """
-    Возвращает список id школ, к которым привязан локальный админ.
-    Основано на таблице school_local_admins(school_id, user_id).
-    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         rows = await fetchall(
@@ -571,10 +565,6 @@ async def _get_school_ids_for_la(la_user_id: int) -> list[int]:
 
 
 async def list_teachers_for_la(la_user_id: int) -> list[dict]:
-    """
-    Список учителей по школам, к которым привязан данный ЛА.
-    Возвращает список словарей: {"UserID": ..., "name": ...}
-    """
     school_ids = await _get_school_ids_for_la(la_user_id)
     if not school_ids:
         return []
@@ -597,10 +587,6 @@ async def list_teachers_for_la(la_user_id: int) -> list[dict]:
 
 
 async def list_students_for_la(la_user_id: int) -> list[dict]:
-    """
-    Список учеников по школам, к которым привязан данный ЛА.
-    Возвращает список словарей: {"UserID": ..., "name": ...}
-    """
     school_ids = await _get_school_ids_for_la(la_user_id)
     if not school_ids:
         return []
@@ -623,10 +609,6 @@ async def list_students_for_la(la_user_id: int) -> list[dict]:
 
 
 async def list_local_admins_for_la(la_user_id: int) -> list[dict]:
-    """
-    Список локальных администраторов по школам текущего ЛА.
-    Фактически показывает всех ЛА в тех же школах.
-    """
     school_ids = await _get_school_ids_for_la(la_user_id)
     if not school_ids:
         return []
@@ -653,7 +635,6 @@ import secrets
 import string
 
 async def create_pending_student(display_name: str, class_id: int, created_by: int | None = None) -> str:
-    """Создаёт приглашение ученика и возвращает токен."""
     token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
     now = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
@@ -668,12 +649,6 @@ async def create_pending_student(display_name: str, class_id: int, created_by: i
     return token
 
 async def consume_pending_student(token: str, user_id: int) -> tuple[int, str] | None:
-    """Активирует приглашение ученика.
-    - Добавляет пользователя в users с ролью 'student' (если его там нет)
-    - Записывает в выбранный класс (enrollments)
-    - Удаляет приглашение
-    Возвращает (class_id, display_name) при успехе, иначе None.
-    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         row = await fetchone(db, "SELECT display_name, class_id FROM pending_students WHERE token = ?", (token,))
@@ -683,7 +658,6 @@ async def consume_pending_student(token: str, user_id: int) -> tuple[int, str] |
         display_name = row["display_name"]
         class_id = row["class_id"]
 
-        # Добавляем/обновляем пользователя
         await db.execute(
             "INSERT OR IGNORE INTO users(UserID, name, post, active) VALUES (?, ?, 'student', 1)",
             (user_id, display_name)
@@ -692,14 +666,10 @@ async def consume_pending_student(token: str, user_id: int) -> tuple[int, str] |
             "UPDATE users SET name = COALESCE(name, ?) WHERE UserID = ?",
             (display_name, user_id)
         )
-
-        # Запишем в класс
         await db.execute(
             "INSERT OR IGNORE INTO enrollments(student_id, class_id) VALUES (?, ?)",
             (user_id, class_id)
         )
-
-        # Удаляем приглашение
         await db.execute("DELETE FROM pending_students WHERE token = ?", (token,))
         await db.commit()
 
@@ -759,9 +729,6 @@ async def list_classes_for_student(student_id: int) -> list:
         )
 
 async def list_teachers_for_student(student_id: int) -> list:
-    """
-    Учителя берутся по школам, где числится ученик: school_students -> school_teachers.
-    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         return await fetchall(
@@ -800,28 +767,11 @@ async def seed_test_data(
     global_admin_ids: Optional[Iterable[int]] = None,
     user_records: Optional[Iterable[Tuple[int, str, str, int]]] = None,
 ) -> None:
-    """
-    Заполняет БД тестовыми данными.
-
-    :param global_admin_ids:
-        Итерация ID пользователей, которых нужно добавить в таблицу
-        глобальных администраторов `administrators(AdminID)`.
-
-    :param user_records:
-        Итерация кортежей пользователей для таблицы `users`:
-        (user_id, name, post, active)
-        где:
-            user_id: int  - Telegram ID пользователя
-            name: str     - отображаемое имя
-            post: str     - должность/роль ('student', 'teacher', 'local_admin', ...)
-            active: int   - статус (обычно 1 для активного пользователя)
-    """
     now = datetime.now(timezone.utc).isoformat()
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # --- 1. Пользователи и глобальные администраторы ---
         if user_records:
             await db.executemany(
                 """
@@ -840,7 +790,6 @@ async def seed_test_data(
                 [(uid,) for uid in global_admin_ids],
             )
 
-        # --- 2. Тестовые учебные заведения (schools) ---
         schools_data = [
             ("Школа №1", "Шк1", "Город, улица 1", "Europe/Moscow"),
             ("Школа №2", "Шк2", "Город, улица 2", "Europe/Moscow"),
@@ -860,20 +809,15 @@ async def seed_test_data(
             if school_row:
                 school_ids.append(school_row["id"])
 
-        # --- 3. Привязка ролей по школам (если есть такие пользователи) ---
-        # локальные админы
         cur = await db.execute("SELECT UserID FROM users WHERE post = 'local_admin'")
         la_ids = [r["UserID"] for r in await cur.fetchall()]
 
-        # учителя
         cur = await db.execute("SELECT UserID FROM users WHERE post = 'teacher'")
         teacher_ids = [r["UserID"] for r in await cur.fetchall()]
 
-        # ученики
         cur = await db.execute("SELECT UserID FROM users WHERE post = 'student'")
         student_ids = [r["UserID"] for r in await cur.fetchall()]
 
-        # привязки локальных админов к первой школе (если есть)
         if school_ids and la_ids:
             await db.executemany(
                 """
@@ -883,7 +827,6 @@ async def seed_test_data(
                 [(school_ids[0], uid) for uid in la_ids],
             )
 
-        # привязки учителей ко всем школам (равномерно)
         for idx, tid in enumerate(teacher_ids):
             if not school_ids:
                 break
@@ -896,7 +839,6 @@ async def seed_test_data(
                 (school_id, tid),
             )
 
-        # привязки учеников ко всем школам (равномерно)
         for idx, sid in enumerate(student_ids):
             if not school_ids:
                 break
@@ -909,7 +851,6 @@ async def seed_test_data(
                 (school_id, sid),
             )
 
-        # --- 4. Тестовые классы и задания ---
         classes_data = [
             ("9А класс",  1000000001, "Europe/Moscow"),
             ("10Б класс", 1000000002, "Europe/Moscow"),
@@ -929,7 +870,6 @@ async def seed_test_data(
             if class_row:
                 class_ids.append(class_row["id"])
 
-        # Запишем всех студентов в первый доступный класс
         if class_ids and student_ids:
             await db.executemany(
                 """
@@ -939,7 +879,6 @@ async def seed_test_data(
                 [(sid, class_ids[0]) for sid in student_ids],
             )
 
-        # Пара тестовых заданий для каждого класса
         for cid in class_ids:
             await db.execute(
                 """
@@ -970,13 +909,98 @@ async def seed_test_data(
 
         await db.commit()
 
-import asyncio
+# ---------------------------------------------------------------------------
+#                 ДОБАВЛЕНО: УТИЛИТЫ ДЛЯ УЧИТЕЛЕЙ/УЧЕНИКОВ (ГА)
+# ---------------------------------------------------------------------------
 
-# asyncio.run(
-#     seed_test_data(
-#     user_records=[
-#         (651213276, "Иван", "student", 1),
-#     ],
-# )
-# )
+async def ensure_user_with_post(user_id: int, post: str, name: str | None = None) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO users(UserID, name, post, active)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(UserID) DO UPDATE SET
+                post = excluded.post,
+                active = 1,
+                name = COALESCE(excluded.name, name)
+            """,
+            (user_id, name, post)
+        )
+        await db.commit()
 
+async def set_user_name(user_id: int, name: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE users SET name = ? WHERE UserID = ?", (name, user_id))
+        await db.commit()
+
+async def assign_teacher_to_school(school_id: int, user_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO school_teachers(school_id, user_id) VALUES (?,?)", (school_id, user_id))
+        await db.commit()
+
+async def assign_student_to_school(school_id: int, user_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR IGNORE INTO school_students(school_id, user_id) VALUES (?,?)", (school_id, user_id))
+        await db.commit()
+
+async def remove_teacher_from_school(school_id: int, user_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM school_teachers WHERE school_id = ? AND user_id = ?", (school_id, user_id))
+        await db.commit()
+
+async def remove_student_from_school(school_id: int, user_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM school_students WHERE school_id = ? AND user_id = ?", (school_id, user_id))
+        await db.commit()
+
+async def list_school_teachers(school_id: int) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await fetchall(
+            db,
+            """
+            SELECT u.UserID AS user_id, COALESCE(u.name, 'Без имени') AS name
+            FROM school_teachers st
+            JOIN users u ON u.UserID = st.user_id
+            WHERE st.school_id = ?
+            ORDER BY name COLLATE NOCASE
+            """,
+            (school_id,)
+        )
+        return [dict(r) for r in rows]
+
+async def list_school_students(school_id: int) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await fetchall(
+            db,
+            """
+            SELECT u.UserID AS user_id, COALESCE(u.name, 'Без имени') AS name
+            FROM school_students ss
+            JOIN users u ON u.UserID = ss.user_id
+            WHERE ss.school_id = ?
+            ORDER BY name COLLATE NOCASE
+            """,
+            (school_id,)
+        )
+        return [dict(r) for r in rows]
+
+
+# === НОВОЕ: список глобальных администраторов (для инфо-меню) ===
+async def list_global_admins() -> list[dict]:
+    """
+    Возвращает всех глобальных администраторов.
+    Формат: [{"user_id": int, "name": str}]
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await fetchall(
+            db,
+            """
+            SELECT a.AdminID AS user_id, COALESCE(u.name, 'Без имени') AS name
+            FROM administrators a
+            LEFT JOIN users u ON u.UserID = a.AdminID
+            ORDER BY a.AdminID
+            """
+        )
+        return [dict(r) for r in rows]
