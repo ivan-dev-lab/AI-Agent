@@ -1,6 +1,7 @@
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
+from aiogram.filters import BaseFilter
 from utils import ensure_authorized, is_local_admin
 from keyboards import (
     la_panel_kb, la_core_kb, la_info_kb, back_kb
@@ -28,6 +29,11 @@ router = Router()
 
 # FSM-состояния для локального администратора
 LA_STATE: dict[int, dict] = {}
+
+class HasLaState(BaseFilter):
+    async def __call__(self, msg: Message) -> bool:
+        # Обрабатываем текст, только если для этого пользователя есть активное LA_STATE
+        return msg.from_user.id in LA_STATE
 
 
 def _back_to_core_kb():
@@ -297,7 +303,7 @@ async def _back_to_core_kb(cq: CallbackQuery):
 #        1                 FSM
 # ==========================================================
 
-@router.message(F.text)
+@router.message(F.text, HasLaState())
 async def handle_la_text_input(msg: Message):
     """Обработка текстовых шагов FSM"""
     st = LA_STATE.get(msg.from_user.id)

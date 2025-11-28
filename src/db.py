@@ -680,23 +680,47 @@ import aiosqlite
 from typing import List, Tuple, Optional
 
 async def list_tasks_for_student(student_id: int, limit: int = 10, offset: int = 0) -> Tuple[list, bool]:
+    """
+    Возвращает задания, которые видит конкретный ученик:
+    - групповые задачи (у которых НЕТ записей в task_targets)
+    - индивидуальные задачи, где task_targets.student_id = student_id
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         rows = await fetchall(
             db,
             """
-            SELECT t.id AS task_id, t.title, t.description, t.due_utc,
-                   c.id AS class_id, c.name AS class_name
+            SELECT
+                t.id   AS task_id,
+                t.title,
+                t.description,
+                t.due_utc,
+                c.id   AS class_id,
+                c.name AS class_name
             FROM enrollments e
             JOIN classes c ON c.id = e.class_id
             JOIN tasks   t ON t.class_id = c.id
             WHERE e.student_id = ?
+              AND (
+                    -- Групповое задание: нет ни одной записи в task_targets
+                    NOT EXISTS (
+                        SELECT 1 FROM task_targets x
+                        WHERE x.task_id = t.id
+                    )
+                    OR
+                    -- Индивидуальное задание для этого ученика
+                    EXISTS (
+                        SELECT 1 FROM task_targets x
+                        WHERE x.task_id = t.id AND x.student_id = ?
+                    )
+              )
             ORDER BY datetime(t.due_utc) ASC, t.id ASC
             LIMIT ? OFFSET ?
             """,
-            (student_id, limit + 1, offset)
+            (student_id, student_id, limit + 1, offset)
         )
         return rows[:limit], len(rows) > limit
+
 
 async def get_task_with_class(task_id: int) -> Optional[aiosqlite.Row]:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -746,20 +770,38 @@ async def list_teachers_for_student(student_id: int) -> list:
         )
 
 async def upcoming_tasks_for_student(student_id: int, limit: int = 10) -> list:
+    """
+    Ближайшие дедлайны для конкретного ученика:
+    только групповые задачи и задачи, назначенные этому ученику.
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         return await fetchall(
             db,
             """
-            SELECT t.id AS task_id, t.title, t.due_utc, c.name AS class_name
+            SELECT
+                t.id   AS task_id,
+                t.title,
+                t.due_utc,
+                c.name AS class_name
             FROM enrollments e
             JOIN classes c ON c.id = e.class_id
             JOIN tasks   t ON t.class_id = c.id
             WHERE e.student_id = ?
+              AND (
+                    NOT EXISTS (
+                        SELECT 1 FROM task_targets x
+                        WHERE x.task_id = t.id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM task_targets x
+                        WHERE x.task_id = t.id AND x.student_id = ?
+                    )
+              )
             ORDER BY datetime(t.due_utc) ASC
             LIMIT ?
             """,
-            (student_id, limit)
+            (student_id, student_id, limit)
         )
 
 

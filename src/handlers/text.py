@@ -163,6 +163,7 @@ async def on_text(msg: Message):
                 reply_markup=single_col_kb(rows)
             )
         # ---------- TEACHER: ADD STUDENT (имя -> выбор группы) ----------
+        # ---------- TEACHER: ADD STUDENT (имя -> выбор группы) ----------
     if mode == "t_assign_student":
         if step == 0:
             data["display_name"] = msg.text.strip()
@@ -171,7 +172,10 @@ async def on_text(msg: Message):
             # Показать список существующих групп
             async with aiosqlite.connect(DB_PATH) as db:
                 db.row_factory = aiosqlite.Row
-                classes = await fetchall(db, "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC")
+                classes = await fetchall(
+                    db,
+                    "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC"
+                )
 
             if not classes:
                 USER_STATE.pop(msg.from_user.id, None)

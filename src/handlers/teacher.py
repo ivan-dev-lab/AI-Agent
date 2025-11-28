@@ -1114,29 +1114,32 @@ async def cb_t_assign_pick_class(cq: CallbackQuery):
     except Exception as e:
         return await cq.message.edit_text(f"❌ Ошибка создания приглашения: {e}", reply_markup=back_kb())
 
-    # Имя группы для сообщения
+    # Имя группы для сообщения (чисто для текста)
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT name FROM classes WHERE id = ?", (class_id,))
         row = await cur.fetchone()
         class_name = row["name"] if row else f"ID {class_id}"
 
-    # Ссылка с токеном (по аналогии с admin_global, но префикс stu_)
     bot_info = await cq.bot.get_me()
     bot_username = bot_info.username
     if not bot_username:
-        return await cq.message.edit_text("❌ У бота не установлен username. Обратитесь к разработчику.", reply_markup=back_kb())
+        return await cq.message.edit_text(
+            "❌ У бота не установлен username. Обратитесь к разработчику.",
+            reply_markup=back_kb()
+        )
 
     invite_link = f"https://t.me/{bot_username}?start=stu_{token}"
 
-    # Сбрасываем состояние и показываем результат
     USER_STATE.pop(cq.from_user.id, None)
     await cq.message.edit_text(
         f"✅ Приглашение для ученика создано!\n\n"
         f"👤 <b>ФИО:</b> {display_name}\n"
         f"📁 <b>Группа:</b> {class_name}\n"
         f"🔗 <b>Ссылка:</b> {invite_link}\n\n"
-        f"ℹ️ Передайте ссылку ученику. Перейдя по ней, он будет добавлен в систему с ролью <b>student</b> и записан в выбранную группу.",
+        f"ℹ️ Передайте ссылку ученику. Перейдя по ней, он будет добавлен в систему с ролью "
+        f"<b>student</b> и записан в выбранную группу.",
         reply_markup=teacher_main_kb(),
         disable_web_page_preview=True
     )
+

@@ -4,8 +4,8 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery
 from typing import Optional
 
-from keyboards import main_menu_kb, ga_main_kb, back_kb, InlineKeyboardMarkup, InlineKeyboardButton
-from utils import ensure_authorized, is_global_admin
+from keyboards import main_menu_kb, ga_main_kb, back_kb, InlineKeyboardMarkup, InlineKeyboardButton, teacher_main_kb
+from utils import ensure_authorized, is_global_admin, has_post
 from db import consume_pending_la, get_school_by_id
 from db import consume_pending_la, get_school_by_id, consume_pending_student
 from config import DB_PATH
@@ -32,6 +32,9 @@ router = Router()
 
 # --- Главное меню в зависимости от роли ---
 async def _show_main_for(user_id: int, target: Message | CallbackQuery):
+    if not await ensure_authorized(user_id, target):
+        return
+    
     # Глобальный администратор
     if await is_global_admin(user_id):
         text = "🛠️ <b>Панель глобального администратора</b>"
@@ -56,7 +59,11 @@ async def _show_main_for(user_id: int, target: Message | CallbackQuery):
     elif await has_post(user_id, "teacher"):
         text = "👨‍🏫 <b>Меню учителя</b>\n\n(раздел в разработке)"
         kb = back_kb()
-
+        text = (
+            "👩‍🏫 <b>Меню учителя</b>\n\n"
+            "Выберите действие."
+        )
+        kb = teacher_main_kb()
     # По умолчанию — общее меню
     else:
         text = (

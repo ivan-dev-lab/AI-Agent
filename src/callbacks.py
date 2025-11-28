@@ -1,6 +1,5 @@
 from aiogram.filters.callback_data import CallbackData
 
-from aiogram.filters.callback_data import CallbackData
 
 # src/callbacks.py
 # Общие
@@ -15,7 +14,6 @@ CB_ADD_TASK = "add_task"
 CB_LIST_TASKS = "list_tasks"
 CB_GEN = "gen"
 CB_SETTINGS = "settings"
-CB_T_ASSIGN_PICK_CLS = "t_assign_pick_cls:"
 
 
 # Ветки выбора (оставляем, если используются)
