@@ -544,19 +544,6 @@ async def la_list_local_admins(cq: CallbackQuery):
         await cq.answer(f"Ошибка: {e}", show_alert=True)
 
 
-@router.callback_query(F.data == CB_LA_BACK_TO_CORE)
-async def _back_to_core_kb(cq: CallbackQuery):
-    """Возврат из подменю ЛА к панели разделов."""
-    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
-        return
-
-    text = (
-        "🏫 <b>Панель локального администратора</b>\n\n"
-        "Выберите раздел:\n"
-        "• 🧱 <b>Основные</b> — назначение и редактирование\n"
-        "• 📚 <b>Информационные</b> — просмотр списков"
-    )
-    await cq.message.edit_text(text, reply_markup=la_panel_kb())
 
  
 
