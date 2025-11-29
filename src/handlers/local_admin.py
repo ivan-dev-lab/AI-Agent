@@ -1,10 +1,10 @@
-
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import BaseFilter
 from utils import ensure_authorized, is_local_admin
 from keyboards import (
-    la_panel_kb, la_core_kb, la_info_kb, back_kb
+    la_panel_kb, la_core_kb, la_info_kb, back_kb,
+    single_col_kb,          # нужно и для учителей, и для учеников
 )
 from handlers.text import USER_STATE
 from callbacks import (
@@ -13,16 +13,25 @@ from callbacks import (
     CB_LA_ASSIGN_TEACHER, CB_LA_ASSIGN_STUDENT,
     CB_LA_EDIT_TEACHERS, CB_LA_EDIT_STUDENTS,
     CB_LA_LIST_TEACHERS, CB_LA_LIST_STUDENTS, CB_LA_LIST_LOCAL_ADMINS,
-    CB_LA_BACK_TO_CORE, CB_LA_ASSIGN_PICK_CLS, 
+    CB_LA_BACK_TO_CORE, CB_LA_ASSIGN_PICK_CLS,
 )
 from db import (
-    create_teacher_for_school,
+    create_teacher_for_school,      # можно оставить, даже если потом не используем
     create_student_for_school,
     list_teachers_for_la,
     list_students_for_la,
     list_local_admins_for_la,
     create_pending_student,
+    set_user_name,
+    remove_teacher_from_school,
+    remove_student_from_school,     # ← ДОБАВИЛИ ЭТО
+    _get_school_ids_for_la,
+    list_schools,
+    ensure_user_with_post,
+    assign_teacher_to_school,
 )
+
+
 
 
 router = Router()
@@ -94,15 +103,67 @@ async def cb_la_core(cq: CallbackQuery):
 
 @router.callback_query(F.data == CB_LA_ASSIGN_TEACHER)
 async def la_assign_teacher_start(cq: CallbackQuery):
-    """Назначить учителя"""
+    """Назначить учителя (по аналогии с global_admin, но в рамках школ ЛА)"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
-    LA_STATE[cq.from_user.id] = {"mode": "assign_teacher"}
+    # Получаем id школ, к которым привязан этот локальный администратор
+    school_ids = await _get_school_ids_for_la(cq.from_user.id)
+    if not school_ids:
+        return await cq.message.edit_text(
+            "❌ Вы не привязаны ни к одной школе. Обратитесь к глобальному администратору.",
+            reply_markup=la_core_kb()
+        )
+
+    # Берём все школы и фильтруем только те, что доступны этому ЛА
+    all_schools = await list_schools()
+    schools = [s for s in all_schools if s["id"] in school_ids]
+    if not schools:
+        return await cq.message.edit_text(
+            "❌ Не найдено ни одной доступной вам школы.",
+            reply_markup=la_core_kb()
+        )
+
+    rows = [(s["name"], f"la_assign_teacher_pick:{s['id']}") for s in schools]
+    rows.append(("⬅ Назад", CB_LA_SEC_CORE))
+
     await cq.message.edit_text(
-        "👩‍🏫 Введите Telegram ID нового учителя (только цифры):",
-        reply_markup=_back_to_core_kb()
+        "Выберите учебное заведение:",
+        reply_markup=single_col_kb(rows)
     )
+@router.callback_query(F.data.startswith("la_assign_teacher_pick:"))
+async def la_assign_teacher_pick_school(cq: CallbackQuery):
+    """После выбора школы ЛА — запрос Telegram ID учителя"""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    try:
+        school_id = int(cq.data.split(":", 1)[1])
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    # Проверяем, что эта школа действительно входит в список школ данного ЛА
+    school_ids = await _get_school_ids_for_la(cq.from_user.id)
+    if school_id not in school_ids:
+        return await cq.answer("Эта школа вам недоступна.", show_alert=True)
+
+    # Находим название школы для текста
+    all_schools = await list_schools()
+    school = next((s for s in all_schools if s["id"] == school_id), None)
+    school_name = school["name"] if school else f"ID {school_id}"
+
+    LA_STATE[cq.from_user.id] = {
+        "mode": "assign_teacher",
+        "school_id": school_id,
+        "school_name": school_name,
+    }
+
+    await cq.message.edit_text(
+        f"👩‍🏫 Назначение учителя в <b>{school_name}</b>\n\n"
+        f"Отправьте <b>Telegram ID</b> пользователя (только цифры).",
+        reply_markup=back_kb()
+    )
+
 
 
 @router.callback_query(F.data == CB_LA_ASSIGN_STUDENT)
@@ -193,18 +254,211 @@ async def la_assign_pick_class(cq: CallbackQuery):
 
 @router.callback_query(F.data == CB_LA_EDIT_TEACHERS)
 async def la_edit_teachers(cq: CallbackQuery):
-    """Редактировать учителей"""
-    if not await is_local_admin(cq.from_user.id):
+    """Редактирование учителей для локального админа"""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
-    await cq.answer("🔧 Функция редактирования учителей — в разработке", show_alert=True)
+
+    teachers = await list_teachers_for_la(cq.from_user.id)
+    if not teachers:
+        return await cq.message.edit_text(
+            "❌ В школах, где вы являетесь локальным администратором, пока нет учителей.",
+            reply_markup=la_core_kb()
+        )
+
+    # list_teachers_for_la возвращает dict с ключами UserID и name
+    rows = [
+        (f"{t['name']} (ID {t['UserID']})", f"la_edit_teacher_actions:{t['UserID']}")
+        for t in teachers
+    ]
+    rows.append(("⬅ Назад", CB_LA_SEC_CORE))
+
+    await cq.message.edit_text(
+        "Выберите учителя:",
+        reply_markup=single_col_kb(rows)
+    )
+
+
+@router.callback_query(F.data.startswith("la_edit_teacher_actions:"))
+async def la_edit_teacher_actions(cq: CallbackQuery):
+    """Меню действий по выбранному учителю (ЛА)"""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    try:
+        _, user_id_str = cq.data.split(":")
+        teacher_id = int(user_id_str)
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✏️ Переименовать",
+            callback_data=f"la_rename_teacher:{teacher_id}"
+        )],
+        [InlineKeyboardButton(
+            text="🗑 Удалить из школ, где я ЛА",
+            callback_data=f"la_remove_teacher:{teacher_id}"
+        )],
+        [InlineKeyboardButton(
+            text="⬅ Назад",
+            callback_data=CB_LA_EDIT_TEACHERS
+        )],
+    ])
+
+    await cq.message.edit_text(
+        f"Учитель ID <code>{teacher_id}</code>. Выберите действие:",
+        reply_markup=kb
+    )
+
+@router.callback_query(F.data.startswith("la_rename_teacher:"))
+async def la_rename_teacher(cq: CallbackQuery):
+    """Запрос нового имени учителя от ЛА"""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    try:
+        _, user_id_str = cq.data.split(":")
+        teacher_id = int(user_id_str)
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    LA_STATE[cq.from_user.id] = {
+        "mode": "la_rename_teacher",
+        "teacher_id": teacher_id,
+    }
+
+    await cq.message.edit_text(
+        "✏️ Введите новое имя учителя:",
+        reply_markup=back_kb()
+    )
+
+@router.callback_query(F.data.startswith("la_remove_teacher:"))
+async def la_remove_teacher(cq: CallbackQuery):
+    """Удалить учителя из всех школ, где текущий пользователь является ЛА."""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    try:
+        _, user_id_str = cq.data.split(":")
+        teacher_id = int(user_id_str)
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    # Получаем школы, где этот пользователь — ЛА
+    school_ids = await _get_school_ids_for_la(cq.from_user.id)
+    if not school_ids:
+        return await cq.answer("Вы не привязаны ни к одной школе.", show_alert=True)
+
+    # Отвязываем учителя от всех этих школ
+    for sid in school_ids:
+        await remove_teacher_from_school(sid, teacher_id)
+
+    await cq.answer("Учитель удалён из ваших школ.")
+    # Обновляем список учителей
+    await la_edit_teachers(cq)
 
 
 @router.callback_query(F.data == CB_LA_EDIT_STUDENTS)
 async def la_edit_students(cq: CallbackQuery):
-    """Редактировать учеников"""
-    if not await is_local_admin(cq.from_user.id):
+    """Редактирование учеников для локального админа"""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
-    await cq.answer("🔧 Функция редактирования учеников — в разработке", show_alert=True)
+
+    students = await list_students_for_la(cq.from_user.id)
+    if not students:
+        return await cq.message.edit_text(
+            "❌ В школах, где вы являетесь локальным администратором, пока нет учеников.",
+            reply_markup=la_core_kb()
+        )
+
+    # list_students_for_la возвращает dict с ключами UserID и name
+    rows = [
+        (f"{s['name']} (ID {s['UserID']})", f"la_edit_student_actions:{s['UserID']}")
+        for s in students
+    ]
+    rows.append(("⬅ Назад", CB_LA_SEC_CORE))
+
+    await cq.message.edit_text(
+        "Выберите ученика:",
+        reply_markup=single_col_kb(rows)
+    )
+@router.callback_query(F.data.startswith("la_edit_student_actions:"))
+async def la_edit_student_actions(cq: CallbackQuery):
+    """Меню действий по выбранному ученику (ЛА)"""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    try:
+        _, user_id_str = cq.data.split(":")
+        student_id = int(user_id_str)
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✏️ Переименовать",
+            callback_data=f"la_rename_student:{student_id}"
+        )],
+        [InlineKeyboardButton(
+            text="🗑 Удалить из школ, где я ЛА",
+            callback_data=f"la_remove_student:{student_id}"
+        )],
+        [InlineKeyboardButton(
+            text="⬅ Назад",
+            callback_data=CB_LA_EDIT_STUDENTS
+        )],
+    ])
+
+    await cq.message.edit_text(
+        f"Ученик ID <code>{student_id}</code>. Выберите действие:",
+        reply_markup=kb
+    )
+@router.callback_query(F.data.startswith("la_rename_student:"))
+async def la_rename_student(cq: CallbackQuery):
+    """Запрос нового имени ученика от ЛА"""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    try:
+        _, user_id_str = cq.data.split(":")
+        student_id = int(user_id_str)
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    LA_STATE[cq.from_user.id] = {
+        "mode": "la_rename_student",
+        "student_id": student_id,
+    }
+
+    await cq.message.edit_text(
+        "✏️ Введите новое имя ученика:",
+        reply_markup=back_kb()
+    )
+@router.callback_query(F.data.startswith("la_remove_student:"))
+async def la_remove_student(cq: CallbackQuery):
+    """Удалить ученика из всех школ, где текущий пользователь является ЛА."""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    try:
+        _, user_id_str = cq.data.split(":")
+        student_id = int(user_id_str)
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    # Получаем школы, где этот пользователь — ЛА
+    school_ids = await _get_school_ids_for_la(cq.from_user.id)
+    if not school_ids:
+        return await cq.answer("Вы не привязаны ни к одной школе.", show_alert=True)
+
+    # Отвязываем ученика от всех этих школ
+    for sid in school_ids:
+        await remove_student_from_school(sid, student_id)
+
+    await cq.answer("Ученик удалён из ваших школ.")
+    # Обновляем список учеников
+    await la_edit_students(cq)
+
 
 
 # ==========================================================
@@ -302,6 +556,26 @@ async def _back_to_core_kb(cq: CallbackQuery):
 # ==========================================================
 #        1                 FSM
 # ==========================================================
+async def _handle_la_rename_teacher_step(msg: Message, st: dict):
+    """Обработка ввода нового имени учителя от ЛА"""
+    new_name = msg.text.strip()
+    if not new_name:
+        return await msg.answer("Имя не может быть пустым. Введите имя ещё раз:")
+
+    teacher_id = st["teacher_id"]
+    await set_user_name(teacher_id, new_name)
+    await msg.answer("Имя учителя обновлено.", reply_markup=la_core_kb())
+    
+async def _handle_la_rename_student_step(msg: Message, st: dict):
+    """Обработка ввода нового имени ученика от ЛА"""
+    new_name = msg.text.strip()
+    if not new_name:
+        return await msg.answer("Имя не может быть пустым. Введите имя ещё раз:")
+
+    student_id = st["student_id"]
+    await set_user_name(student_id, new_name)
+    await msg.answer("Имя ученика обновлено.", reply_markup=la_core_kb())
+
 
 @router.message(F.text, HasLaState())
 async def handle_la_text_input(msg: Message):
@@ -310,6 +584,7 @@ async def handle_la_text_input(msg: Message):
     if not st:
         return
 
+    # Проверяем, что пользователь авторизован и действительно ЛА
     if not await ensure_authorized(msg.from_user.id, msg) or not await is_local_admin(msg.from_user.id):
         LA_STATE.pop(msg.from_user.id, None)
         return
@@ -317,22 +592,43 @@ async def handle_la_text_input(msg: Message):
     mode = st.get("mode")
     raw = msg.text.strip()
 
-    if not raw.isdigit():
-        return await msg.answer("❌ Введите корректный Telegram ID (только цифры).")
-
-    user_id = int(raw)
-
     try:
+        # 👉 Переименование учителя (без проверки isdigit)
+        if mode == "la_rename_teacher":
+            await _handle_la_rename_teacher_step(msg, st)
+            return
+
+        # 👉 Переименование ученика (без проверки isdigit)
+        if mode == "la_rename_student":
+            await _handle_la_rename_student_step(msg, st)
+            return
+
+        # Для остальных режимов ожидаем Telegram ID (только цифры)
+        if not raw.isdigit():
+            return await msg.answer("❌ Введите корректный Telegram ID (только цифры).")
+
+        user_id = int(raw)
+
         if mode == "assign_teacher":
-            ok = await create_teacher_for_school(user_id, msg.from_user.id)
-            if ok:
-                await msg.answer(f"✅ Учитель <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
-            else:
-                await msg.answer(
-                    "❌ Не удалось добавить учителя.\n"
-                    "Проверьте, что вы привязаны как ЛА к школе и что такой пользователь допустим.",
+            school_id = st.get("school_id")
+            school_name = st.get("school_name", "выбранная школа")
+
+            if school_id is None:
+                return await msg.answer(
+                    "❌ Не найдена школа в состоянии. Попробуйте заново через меню локального администратора.",
                     reply_markup=la_core_kb()
                 )
+
+            # Создаём/обновляем пользователя с ролью teacher
+            await ensure_user_with_post(user_id, post="teacher")
+            # Назначаем в выбранную школу
+            await assign_teacher_to_school(school_id, user_id)
+
+            await msg.answer(
+                f"✅ Учитель <code>{user_id}</code> назначен в школу <b>{school_name}</b>.",
+                reply_markup=la_core_kb()
+            )
+
 
         elif mode == "assign_student":
             ok = await create_student_for_school(user_id, msg.from_user.id)
@@ -351,4 +647,5 @@ async def handle_la_text_input(msg: Message):
     except Exception as e:
         await msg.answer(f"❌ Ошибка: {e}")
     finally:
+        # В любом случае очищаем состояние
         LA_STATE.pop(msg.from_user.id, None)
