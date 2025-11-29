@@ -16,7 +16,7 @@ from callbacks import (
     CB_LA_BACK_TO_CORE, CB_LA_ASSIGN_PICK_CLS,
 )
 from db import (
-    create_teacher_for_school,      # можно оставить, даже если потом не используем
+    create_teacher_for_school,      # можно оставить, даже если потом не используем 222222
     create_student_for_school,
     list_teachers_for_la,
     list_students_for_la,
