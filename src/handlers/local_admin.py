@@ -1,11 +1,17 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import BaseFilter
+
+import aiosqlite                     # ← ДОБАВИТЬ
+
 from utils import ensure_authorized, is_local_admin
 from keyboards import (
     la_panel_kb, la_core_kb, la_info_kb, back_kb,
-    single_col_kb,          # нужно и для учителей, и для учеников
+    single_col_kb,
 )
+
+from config import DB_PATH           # ← ТОЖЕ ДОБАВИТЬ
+
 from handlers.text import USER_STATE
 from callbacks import (
     CB_LA_MENU,
@@ -16,7 +22,7 @@ from callbacks import (
     CB_LA_BACK_TO_CORE, CB_LA_ASSIGN_PICK_CLS,
 )
 from db import (
-    create_teacher_for_school,      # можно оставить, даже если потом не используем 222222
+    create_teacher_for_school,
     create_student_for_school,
     list_teachers_for_la,
     list_students_for_la,
@@ -24,12 +30,13 @@ from db import (
     create_pending_student,
     set_user_name,
     remove_teacher_from_school,
-    remove_student_from_school,     # ← ДОБАВИЛИ ЭТО
+    remove_student_from_school,
     _get_school_ids_for_la,
     list_schools,
     ensure_user_with_post,
     assign_teacher_to_school,
 )
+
 
 
 
