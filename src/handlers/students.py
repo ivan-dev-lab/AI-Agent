@@ -1,35 +1,100 @@
 import logging
+import os
+import asyncio
+import json
+from datetime import datetime
+
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
-from utils import ensure_role, fmt_dt_local
-from utils import ensure_role, fmt_dt_local
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from zoneinfo import ZoneInfo
 
+from utils import ensure_role, fmt_dt_local
 from callbacks import (
-    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS, CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK,
-    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS,
-    CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK, StudentCB
+    CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS, CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK, StudentCB, TaskCB
 )
-from keyboards import student_menu_kb, tasks_list_kb
-from db import (
-    list_tasks_for_student, list_classes_for_student, list_teachers_for_student, upcoming_tasks_for_student
-)
-from zoneinfo import ZoneInfo
-from config import DEFAULT_TZ
-from keyboards import student_menu_kb, tasks_list_kb
+from keyboards import student_menu_kb, tasks_list_kb, task_detail_kb
 from db import (
     list_tasks_for_student, list_classes_for_student,
-    list_teachers_for_student, upcoming_tasks_for_student
+    list_teachers_for_student, upcoming_tasks_for_student, get_task_with_class
 )
-# from src.utils import send_to_neural_api
-from config import DEFAULT_TZ
+from config import DEFAULT_TZ, GENAPI_TOKEN
+from services.genapi_client import call_genapi, DEFAULT_ENDPOINT as GENAPI_ENDPOINT, _extract_content
 
 router = Router()
 logger = logging.getLogger(__name__)
 PAGE_SIZE = 8
+
+# === GenAPI (deepseek-v3) ===
+GENAPI_FALLBACK_TOKEN = "sk-v6FKLfILfda7HreS8zOPZ5Rcp8hcJBeNJnX1QZoiS7H2H5QOta9j9FXFS1nM"
+
+
+def _get_genapi_token() -> str:
+    """Берём токен из config/env, при отсутствии — используем выданный пользователем fallback."""
+    return (GENAPI_TOKEN or os.getenv("GENAPI_TOKEN") or GENAPI_FALLBACK_TOKEN).strip()
+
+
+def _format_task_context(task_row: dict) -> str:
+    title = task_row.get("title") or "Без названия"
+    desc = task_row.get("description") or "Описание отсутствует"
+    class_name = task_row.get("class_name") or "Без группы"
+    due_utc = task_row.get("due_utc")
+    try:
+        tz = ZoneInfo(DEFAULT_TZ)
+        due_local = datetime.fromisoformat(due_utc).astimezone(tz).strftime("%Y-%m-%d %H:%M")
+        due_str = f"{due_local} {tz.key}"
+    except Exception:
+        due_str = due_utc or "Без даты"
+
+    return (
+        f"Задание: {title}\n"
+        f"Описание: {desc}\n"
+        f"Класс/группа: {class_name}\n"
+        f"Дедлайн: {due_str}"
+    )
+
+
+def _build_ai_messages(task_ctx: str, user_question: str) -> list[dict]:
+    system_prompt = (
+        "Ты дружелюбный учебный ассистент. Помогаешь школьнику разобраться с домашним заданием, "
+        "объясняешь шаги и даёшь короткий, понятный ответ. Если чего-то не хватает в условии, "
+        "подскажи, что уточнить. Не придумывай факты."
+    )
+    user_prompt = (
+        f"Контекст задания:\n{task_ctx}\n\n"
+        f"Вопрос ученика:\n{user_question}\n\n"
+        "Дай чёткий, пошаговый ответ. Если нужно — предложи простой пример или план решения."
+    )
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+async def _typing(message: Message):
+    """Отправляет статус 'печатает' пока задача активна."""
+    try:
+        while True:
+            await message.bot.send_chat_action(message.chat.id, "typing")
+            await asyncio.sleep(4)
+    except asyncio.CancelledError:
+        return
+
+
+def _normalize_ai_answer(raw: str) -> str:
+    """
+    Если в ответе осталось JSON-представление, попробуем извлечь текст.
+    """
+    if not raw:
+        return raw
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return raw
+    extracted = _extract_content(parsed)
+    return extracted if extracted else raw
 
 
 # Состояния для нейросети
@@ -65,64 +130,66 @@ async def student_tasks_entry(cq: CallbackQuery):
     page = 0
     tasks, has_next = await list_tasks_for_student(cq.from_user.id, limit=PAGE_SIZE, offset=0)
     text = (
-        "📋 Мои задания\n\nВыберите задание, чтобы открыть подробности."
+        "📋 Мои задания\n\nВыбирай задание, чтобы открыть подробности или спросить учителя/нейросеть."
         if tasks else
         "📋 Мои задания\n\nПока заданий нет."
     )
     await cq.message.edit_text(text, reply_markup=tasks_list_kb(tasks, page, has_next))
     await cq.answer()
 
-# Открытие конкретного задания
-@router.callback_query(F.data.startswith("open_task_"))
-async def open_task(callback: CallbackQuery, state: FSMContext):
+
+@router.callback_query(StudentCB.filter(F.action == "tasks"))
+async def student_tasks_paged(cq: CallbackQuery, callback_data: StudentCB):
+    if not await ensure_role(cq.from_user.id, "student", cq):
+        return
+    page = callback_data.page or 0
+    offset = page * PAGE_SIZE
+    tasks, has_next = await list_tasks_for_student(cq.from_user.id, limit=PAGE_SIZE, offset=offset)
+    text = (
+        "📋 Мои задания\n\nВыбирай задание, чтобы открыть подробности или спросить учителя/нейросеть."
+        if tasks else
+        "📋 Мои задания\n\nПока заданий нет."
+    )
+    await cq.message.edit_text(text, reply_markup=tasks_list_kb(tasks, page, has_next))
+    await cq.answer()
+
+@router.callback_query(TaskCB.filter(F.action == "detail"))
+async def open_task(callback: CallbackQuery, callback_data: TaskCB):
     if not await ensure_role(callback.from_user.id, "student", callback):
         return
 
-    task_id = int(callback.data.split("_")[-1])
-
-    # Получаем список заданий и находим нужное
-    tasks, _ = await list_tasks_for_student(callback.from_user.id, limit=100, offset=0)
-    task = next((t for t in tasks if t['id'] == task_id), None)
-
+    task = await get_task_with_class(callback_data.task_id)
     if not task:
-        await callback.message.answer("Задание не найдено.")
+        await callback.answer("Задание не найдено", show_alert=True)
         return
 
-    # Клавиатура с двумя новыми кнопками
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🧑‍🏫 Спросить у учителя", callback_data=f"ask_teacher_{task_id}")],
-        [InlineKeyboardButton(text="🤖 Спросить у нейросети", callback_data=f"ask_ai_{task_id}")],
-        [InlineKeyboardButton(text="🔙 Назад к заданиям", callback_data=CB_STU_TASKS)]
-    ])
-
+    text = f"📘 *{task['title']}*\n\n{task['description'] or 'Без описания'}"
     await callback.message.edit_text(
-        f"📘 *{task['title']}*\n\n{task['description']}",
+        text,
         parse_mode="Markdown",
-        reply_markup=kb
+        reply_markup=task_detail_kb(callback_data.page, callback_data.task_id)
     )
     await callback.answer()
 
-# Обработчик кнопки «Спросить у учителя» (заглушка)
-@router.callback_query(F.data.startswith("ask_teacher_"))
-async def ask_teacher(callback: CallbackQuery):
+@router.callback_query(TaskCB.filter(F.action == "ask_teacher"))
+async def ask_teacher(callback: CallbackQuery, callback_data: TaskCB):
     if not await ensure_role(callback.from_user.id, "student", callback):
         return
 
-    task_id = int(callback.data.split("_")[-1])
+    task_id = callback_data.task_id
     await callback.message.answer(
         f"🧑‍🏫 Отправляю вопрос учителю по заданию #{task_id}...\n\n"
         "Ожидайте ответа — учитель скоро свяжется с вами."
     )
     await callback.answer()
 
-# Начало диалога с нейросетью
-@router.callback_query(F.data.startswith("ask_ai_"))
-async def ask_ai(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(TaskCB.filter(F.action == "ask_ai"))
+async def ask_ai(callback: CallbackQuery, callback_data: TaskCB, state: FSMContext):
     if not await ensure_role(callback.from_user.id, "student", callback):
         return
 
-    task_id = int(callback.data.split("_")[-1])
-    await state.update_data(selected_task_id=task_id)
+    task_id = callback_data.task_id
+    await state.update_data(selected_task_id=task_id, back_page=callback_data.page)
 
     await callback.message.answer("✍️ Введи свой вопрос для нейросети:")
     await state.set_state(AskAIState.waiting_for_query)
@@ -134,26 +201,68 @@ async def process_ai_query(message: Message, state: FSMContext):
     user_data = await state.get_data()
     task_id = user_data.get("selected_task_id")
 
-    query_text = message.text.strip()
+    query_text = (message.text or "").strip()
     if not query_text:
         await message.answer("Пожалуйста, введите корректный запрос.")
         return
 
-    await message.answer("⏳ Нейросеть обрабатывает ваш запрос...")
+    task = await get_task_with_class(task_id) if task_id else None
+    if not task:
+        await message.answer(
+            "Не удалось найти задание. Откройте задание заново и повторите вопрос."
+        )
+        await state.clear()
+        return
 
-    # Заглушка ответа нейросети
-    mock_response = (
-        f"Я — тестовая версия нейросети.\n\n"
-        f"Вы задали вопрос: *{query_text}*\n\n"
-        f"По заданию #{task_id} я могу предположить следующее:\n\n"
-        "Это пример ответа от нейросети. В реальной версии сюда придёт ответ от API."
-    )
+    status_msg = await message.answer("⏳ Нейросеть обрабатывает ваш запрос...")
+    typing_task = asyncio.create_task(_typing(message))
 
-    await message.answer(mock_response, parse_mode="Markdown")
+    task_context = _format_task_context(dict(task))
+    messages = _build_ai_messages(task_context, query_text)
+
+    progress_step = {"i": 0}
+
+    async def on_progress(data: dict):
+        progress_step["i"] += 1
+        dots = "." * (progress_step["i"] % 3 + 1)
+        status = data.get("status") or "processing"
+        try:
+            await status_msg.edit_text(f"⏳ Нейросеть думает{dots}\nСтатус: {status}")
+        except Exception:
+            pass
+
+    try:
+        ai_answer = await call_genapi(
+            messages,
+            api_key=_get_genapi_token(),
+            endpoint=GENAPI_ENDPOINT,
+            poll=True,
+            poll_interval=1,
+            poll_timeout=60,
+            on_progress=on_progress,
+        )
+    except Exception as e:
+        logger.exception("GenAPI error")
+        await status_msg.edit_text(
+            "Не удалось получить ответ от нейросети. Попробуйте ещё раз чуть позже."
+            f"\nОшибка: {e}"
+        )
+        await state.clear()
+        typing_task.cancel()
+        return
+
+    typing_task.cancel()
+    ai_answer = _normalize_ai_answer(ai_answer)
+    final_text = f"🤖 Ответ нейросети по заданию #{task_id}:\n\n{ai_answer}"
+    try:
+        await status_msg.edit_text(final_text, parse_mode="Markdown")
+    except Exception:
+        await status_msg.edit_text(final_text)
+
     await state.clear()
 
-# Преподаватели
 @router.callback_query(F.data == CB_STU_TEACHERS)
+
 async def student_teachers(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
         return

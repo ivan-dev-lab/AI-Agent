@@ -21,7 +21,6 @@ from handlers.admin_global import router as ga_router
 from handlers.teacher import router as teacher_router
 from handlers.text import router as text_router  # наш текстовый роутер
 from handlers.local_admin import router as la_router  # LOCAL ADMIN
-from utils import ensure_authorized, is_local_admin
 
 dotenv.load_dotenv()
 

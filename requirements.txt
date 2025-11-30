@@ -5,3 +5,4 @@ langchain_community==0.3.30
 langchain_core==0.3.76
 python-dotenv==1.1.1
 pytz==2024.2
+aiohttp==3.10.10

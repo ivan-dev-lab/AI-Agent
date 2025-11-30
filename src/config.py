@@ -14,6 +14,7 @@ if not BOT_TOKEN:
 DB_PATH = os.getenv("DB_PATH", "agent.db")
 DEFAULT_TZ = os.getenv("DEFAULT_TZ", "UTC")
 DEFAULT_MODEL = os.getenv("MODEL_NAME", "llama3:8b")
+GENAPI_TOKEN = os.getenv("GENAPI_TOKEN", "")
 
 # напоминания для заданий
 REMINDER_OFFSETS = [
