@@ -67,9 +67,7 @@ async def _show_main_for(user_id: int, target: Message | CallbackQuery):
     # По умолчанию — общее меню
     else:
         text = (
-            "🏁 <b>Главное меню</b>\n\n"
-            "Выберите действие. Ввод данных происходит <i>после</i> нажатия кнопки.\n"
-            "Таймзона по умолчанию: <b>UTC</b>."
+            "Вы не авторизованы"
         )
         kb = main_menu_kb()
 
