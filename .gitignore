@@ -4,3 +4,5 @@ src/handlers/__pycache__
 venv
 agent.db-shm
 agent.db-wal
+src/services/__pycache__/__init__.cpython-311.pyc
+src/services/__pycache__/genapi_client.cpython-311.pyc
