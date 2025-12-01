@@ -19,8 +19,8 @@ from handlers.classes import router as classes_router
 from handlers.gen import router as gen_router
 from handlers.admin_global import router as ga_router
 from handlers.teacher import router as teacher_router
-from handlers.text import router as text_router  # наш текстовый роутер
-from handlers.local_admin import router as la_router  # LOCAL ADMIN
+from handlers.text import router as text_router  
+from handlers.local_admin import router as la_router  
 
 dotenv.load_dotenv()
 
