@@ -110,7 +110,7 @@ async def cb_la_core(cq: CallbackQuery):
 
 @router.callback_query(F.data == CB_LA_ASSIGN_TEACHER)
 async def la_assign_teacher_start(cq: CallbackQuery):
-    """Назначить учителя (по аналогии с global_admin, но в рамках школ ЛА)"""
+    """Назначить учителя для школ локального администратора."""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -118,7 +118,7 @@ async def la_assign_teacher_start(cq: CallbackQuery):
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if not school_ids:
         return await cq.message.edit_text(
-            "❌ Вы не привязаны ни к одной школе. Обратитесь к глобальному администратору.",
+            "❌ Вы не привязаны ни к одной школе. Обратитесь к администратору школы.",
             reply_markup=la_core_kb()
         )
 

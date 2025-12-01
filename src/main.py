@@ -17,7 +17,6 @@ from handlers.tasks import router as tasks_router
 from handlers.students import router as students_router
 from handlers.classes import router as classes_router
 from handlers.gen import router as gen_router
-from handlers.admin_global import router as ga_router
 from handlers.teacher import router as teacher_router
 from handlers.text import router as text_router  
 from handlers.local_admin import router as la_router  
@@ -33,7 +32,6 @@ async def main():
 
     # Подключаем все роутеры
     dp.include_router(common_router)
-    dp.include_router(ga_router)
     dp.include_router(la_router)        # NEW: меню локального администратора
     dp.include_router(enroll_router)
     dp.include_router(tasks_router)

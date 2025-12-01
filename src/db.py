@@ -29,6 +29,8 @@ async def ensure_db() -> None:
             """
             PRAGMA journal_mode=WAL;
 
+            DROP TABLE IF EXISTS administrators;
+
             CREATE TABLE IF NOT EXISTS classes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
@@ -60,11 +62,6 @@ async def ensure_db() -> None:
                 name    TEXT,
                 post    TEXT NOT NULL,
                 active  INTEGER NOT NULL DEFAULT 0
-            );
-
-            /* Глобальные администраторы (храним только Telegram ID) */
-            CREATE TABLE IF NOT EXISTS administrators (
-                AdminID INTEGER PRIMARY KEY
             );
 
             /* Привязки ученик<->класс. student_id = users.UserID */
@@ -153,27 +150,15 @@ async def ensure_db() -> None:
         await db.commit()
 
 # ---- авторизация/роли ---------------------------------------------------------
-async def is_global_admin(user_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1", (user_id,))
-        row = await cur.fetchone()
-        await cur.close()
-        return row is not None
-
 async def is_known_user(user_id: int) -> bool:
-    """Есть ли пользователь в users или administrators."""
+    """Check whether a user exists in users."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur1 = await db.execute("SELECT 1 FROM users WHERE UserID = ? LIMIT 1", (user_id,))
         r1 = await cur1.fetchone()
         await cur1.close()
-        if r1:
-            return True
-        cur2 = await db.execute("SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1", (user_id,))
-        r2 = await cur2.fetchone()
-        await cur2.close()
-        return r2 is not None
+        return r1 is not None
+
 
 # ---- schools helpers -----------------------------------------------------------
 async def create_school(
@@ -806,7 +791,6 @@ async def upcoming_tasks_for_student(student_id: int, limit: int = 10) -> list:
 
 
 async def seed_test_data(
-    global_admin_ids: Optional[Iterable[int]] = None,
     user_records: Optional[Iterable[Tuple[int, str, str, int]]] = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
@@ -821,15 +805,6 @@ async def seed_test_data(
                 VALUES (?, ?, ?, ?)
                 """,
                 list(user_records),
-            )
-
-        if global_admin_ids:
-            await db.executemany(
-                """
-                INSERT OR IGNORE INTO administrators(AdminID)
-                VALUES (?)
-                """,
-                [(uid,) for uid in global_admin_ids],
             )
 
         schools_data = [
@@ -1024,25 +999,5 @@ async def list_school_students(school_id: int) -> list:
             ORDER BY name COLLATE NOCASE
             """,
             (school_id,)
-        )
-        return [dict(r) for r in rows]
-
-
-# === НОВОЕ: список глобальных администраторов (для инфо-меню) ===
-async def list_global_admins() -> list[dict]:
-    """
-    Возвращает всех глобальных администраторов.
-    Формат: [{"user_id": int, "name": str}]
-    """
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        rows = await fetchall(
-            db,
-            """
-            SELECT a.AdminID AS user_id, COALESCE(u.name, 'Без имени') AS name
-            FROM administrators a
-            LEFT JOIN users u ON u.UserID = a.AdminID
-            ORDER BY a.AdminID
-            """
         )
         return [dict(r) for r in rows]

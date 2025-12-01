@@ -56,9 +56,6 @@ async def fetchall(db, sql: str, params=()):
 
 # ---------- Authorization ----------
 
-async def is_global_admin(user_id: int) -> bool:
-    """Есть ли пользователь в administrators (AdminID)."""
-    return await _exists("SELECT 1 FROM administrators WHERE AdminID = ? LIMIT 1", (user_id,))
 
 async def is_known_user(user_id: int) -> bool:
     """Есть ли пользователь в users (UserID) — любая роль."""
@@ -66,11 +63,11 @@ async def is_known_user(user_id: int) -> bool:
 
 async def ensure_authorized(user_id: int, target) -> bool:
     """
-    Пускаем, если это глобальный админ или пользователь есть в users.
-    Иначе — показываем сообщение и возвращаем False.
-    target — Message или CallbackQuery.
+    Allow access only when the user exists in users.
+    Otherwise send a message and return False.
+    target - Message or CallbackQuery.
     """
-    if await is_global_admin(user_id) or await is_known_user(user_id):
+    if await is_known_user(user_id):
         return True
 
     text = "🚫 Вы не авторизованы. Обратитесь к администратору."
