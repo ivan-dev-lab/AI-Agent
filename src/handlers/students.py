@@ -36,7 +36,20 @@ def _get_genapi_token() -> str:
     return (GENAPI_TOKEN or os.getenv("GENAPI_TOKEN") or GENAPI_FALLBACK_TOKEN).strip()
 
 
-def _format_task_context(task_row: dict) -> str:
+def _format_task_context(task_row) -> str:
+    """Формирует контекст задания для AI.
+
+    В БД мы часто работаем с aiosqlite.Row (sqlite3.Row), у которого нет метода .get().
+    Поэтому нормализуем к dict.
+    """
+    if task_row is None:
+        task_row = {}
+    elif not isinstance(task_row, dict):
+        try:
+            task_row = dict(task_row)
+        except Exception:
+            task_row = {}
+
     title = task_row.get("title") or "Без названия"
     desc = task_row.get("description") or "Описание отсутствует"
     class_name = task_row.get("class_name") or "Без группы"

@@ -5,7 +5,7 @@ import string           # ← добавлено
 from typing import Any, Iterable, Optional
 from datetime import datetime, timezone
 
-from config import DB_PATH
+from config import DB_PATH, DEFAULT_TZ
 
 # ---- базовые утилиты ---------------------------------------------------------
 async def fetchone(db, sql: str, params: Iterable[Any] = ()):
@@ -34,7 +34,8 @@ async def ensure_db() -> None:
             CREATE TABLE IF NOT EXISTS classes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
-                owner_chat_id INTEGER NOT NULL
+                owner_chat_id INTEGER NOT NULL,
+                timezone TEXT NOT NULL DEFAULT 'UTC'
             );
 
             CREATE TABLE IF NOT EXISTS tasks (
@@ -147,6 +148,24 @@ async def ensure_db() -> None:
             
             """
         )
+
+        # --- простая миграция схемы (без alembic) -----------------------------
+        # В ранних версиях проекта в `classes` не было колонки timezone.
+        # Многие части кода (список заданий, планировщик) ожидают её.
+        cols = await fetchall(db, "PRAGMA table_info(classes)")
+        col_names = {c["name"] for c in cols} if cols else set()
+        if "timezone" not in col_names:
+            # DDL в SQLite проще делать через format c безопасным экранированием.
+            tz = (DEFAULT_TZ or "UTC").replace("'", "''")
+            await db.execute(
+                f"ALTER TABLE classes ADD COLUMN timezone TEXT NOT NULL DEFAULT '{tz}'"
+            )
+        # нормализуем пустые значения
+        await db.execute(
+            "UPDATE classes SET timezone = ? WHERE timezone IS NULL OR timezone = ''",
+            (DEFAULT_TZ or "UTC",),
+        )
+
         await db.commit()
 
 # ---- авторизация/роли ---------------------------------------------------------

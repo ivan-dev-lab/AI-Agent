@@ -20,6 +20,7 @@ from handlers.gen import router as gen_router
 from handlers.teacher import router as teacher_router
 from handlers.text import router as text_router  
 from handlers.local_admin import router as la_router  
+from scheduler_jobs import init_scheduler
 
 dotenv.load_dotenv()
 
@@ -28,6 +29,9 @@ async def main():
     await ensure_db()
 
     bot = Bot(token=BOT_TOKEN, default=default_props)
+
+    # Планировщик напоминаний (APScheduler) + поднятие сохранённых jobs из БД
+    await init_scheduler(bot)
     dp = Dispatcher()
 
     # Подключаем все роутеры

@@ -12,7 +12,7 @@ from config import DB_PATH, DEFAULT_TZ
 from db import fetchone, fetchall
 from keyboards import back_kb, single_col_kb
 from utils import fmt_dt_local
-from scheduler_jobs import schedule_task_jobs
+from scheduler_jobs import schedule_task_jobs, send_task_assigned_notification
 from callbacks import (
     CB_STU_AFTER_ADD_SKIP,
     CB_ENROLL_PICK_CLS, CB_LA_ASSIGN_PICK_CLS,
@@ -64,8 +64,8 @@ async def on_text(msg: Message):
             try:
                 # сохраняем название группы и tg-id создателя
                 await db.execute(
-                    "INSERT INTO classes(name, owner_chat_id) VALUES (?, ?)",
-                    (name, msg.from_user.id)
+                    "INSERT INTO classes(name, owner_chat_id, timezone) VALUES (?, ?, ?)",
+                    (name, msg.from_user.id, DEFAULT_TZ)
                 )
                 await db.commit()
             except aiosqlite.IntegrityError:
@@ -298,7 +298,13 @@ async def on_text(msg: Message):
                 if not class_row:
                     return await msg.answer("Класс не найден (возможно, был удалён).", reply_markup=back_kb())
 
-                tz = ZoneInfo(DEFAULT_TZ)
+                # aiosqlite.Row / sqlite3.Row не поддерживает .get(), поэтому берём через []
+                tz_name = None
+                try:
+                    tz_name = class_row["timezone"] if "timezone" in class_row.keys() else None
+                except Exception:
+                    tz_name = None
+                tz = ZoneInfo((tz_name or DEFAULT_TZ or "UTC"))
 
                 await db.execute(
                     "INSERT INTO tasks(class_id, title, description, due_utc, created_utc) VALUES(?, ?, ?, ?, ?)",
@@ -312,16 +318,35 @@ async def on_text(msg: Message):
                 row = await fetchone(db, "SELECT last_insert_rowid() AS id")
                 task_id = row["id"]
 
+                # Определяем получателей и фиксируем их в task_targets:
+                # - scope == 'sel' -> selected_students
+                # - иначе -> все ученики класса (enrollments)
                 scope = state.get("data", {}).get("scope")
                 selected_students = state.get("data", {}).get("selected_students") or []
+
                 if scope == "sel" and selected_students:
-                    pairs = [(task_id, sid) for sid in selected_students]
-                    await db.executemany(
-                        "INSERT OR IGNORE INTO task_targets(task_id, student_id) VALUES(?, ?)",
-                        pairs
-                    )
-                    await db.commit()
+                    target_ids = list(map(int, selected_students))
+                    # Индивидуальное назначение: фиксируем явных получателей
+                    if target_ids:
+                        pairs = [(task_id, sid) for sid in target_ids]
+                        await db.executemany(
+                            "INSERT OR IGNORE INTO task_targets(task_id, student_id) VALUES(?, ?)",
+                            pairs,
+                        )
+                        await db.commit()
+                else:
+                    # Назначение всей группе: в task_targets не пишем (это "group"-задача),
+                    # но получателей для уведомления берём по enrollments.
+                    enr = await fetchall(db, "SELECT student_id FROM enrollments WHERE class_id = ?", (class_row["id"],))
+                    target_ids = [int(r["student_id"]) for r in (enr or [])]
+
+            # Уведомляем учеников о назначении задания (сразу, без планировщика)
+            try:
+                await send_task_assigned_notification(task_id, target_ids)
+            except Exception:
+                pass
             await schedule_task_jobs(task_id)
+
             due_local_str = fmt_dt_local(data["due_utc"], tz)
             USER_STATE.pop(msg.from_user.id, None)
 
@@ -329,7 +354,9 @@ async def on_text(msg: Message):
             scope = state.get("data", {}).get("scope")
             extra = ""
             if scope == "sel":
-                extra = f"\nНазначено выбранным ученикам: <b>{len(selected_students)}</b>"
+                extra = f"\nНазначено выбранным ученикам: <b>{len(target_ids)}</b>"
+            else:
+                extra = f"\nНазначено всей группе: <b>{len(target_ids)}</b>"
 
             return await msg.answer(
                 f"✅ Задание создано: <b>{data['title']}</b>\n"

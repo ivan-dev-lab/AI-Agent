@@ -17,11 +17,11 @@ DEFAULT_MODEL = os.getenv("MODEL_NAME", "llama3:8b")
 GENAPI_TOKEN = os.getenv("GENAPI_TOKEN", "")
 
 # напоминания для заданий
+# Требование: за 7 дней до дедлайна, за 3 дня и за 24 часа.
 REMINDER_OFFSETS = [
+    ("T-7d", timedelta(days=7)),
+    ("T-3d", timedelta(days=3)),
     ("T-24h", timedelta(hours=24)),
-    ("T-3h", timedelta(hours=3)),
-    ("T-15m", timedelta(minutes=15)),
-    ("T0", timedelta(seconds=0)),
 ]
 
 default_props = DefaultBotProperties(parse_mode='HTML')

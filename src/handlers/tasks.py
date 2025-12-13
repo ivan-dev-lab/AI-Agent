@@ -23,6 +23,7 @@ router = Router()
 async def list_tasks(cq: CallbackQuery):
     # (примерный код списка -- оставлен как в проекте)
     async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
         rows = await fetchall(conn, "SELECT t.id, t.title, c.name as class_name, t.due_utc, c.timezone FROM tasks t JOIN classes c ON t.class_id=c.id")
     if not rows:
         await cq.message.edit_text("<b>Нет заданий</b>", reply_markup=back_kb())
