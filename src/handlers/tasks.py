@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import aiosqlite
 from callbacks import TaskCB
 from keyboards import task_detail_kb
 from db import get_task_with_class
 
-from config import DB_PATH
+from config import DB_PATH, DEFAULT_TZINFO
 from db import fetchall, fetchone
 from keyboards import back_kb, single_col_kb
 from callbacks import CB_ADD_TASK, CB_ADD_TASK_PICK_CLASS, CB_LIST_TASKS
@@ -31,7 +31,10 @@ async def list_tasks(cq: CallbackQuery):
     lines = ["<b>📋 Список заданий</b>"]
     for r in rows:
         tz = ZoneInfo(r["timezone"])
-        due_local_str = fmt_dt_local(datetime.fromisoformat(r["due_utc"]).replace(tzinfo=timezone.utc), tz)
+        due_dt = datetime.fromisoformat(r["due_utc"])
+        if due_dt.tzinfo is None:
+            due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
+        due_local_str = fmt_dt_local(due_dt, tz)
         lines.append(f"#{r['id']} • {r['class_name']} • <b>{r['title']}</b> — {due_local_str} {tz.key}")
     text = "\n".join(lines)
     await cq.message.edit_text(text, reply_markup=back_kb())
@@ -45,10 +48,22 @@ async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
     t = await get_task_with_class(callback_data.task_id)
     if not t:
         await cb.answer("Задание не найдено", show_alert=True); return
+    try:
+        tz_name = t["timezone"] if "timezone" in t.keys() else None  # type: ignore[attr-defined]
+    except Exception:
+        tz_name = None
+    try:
+        tz = ZoneInfo(tz_name or DEFAULT_TZINFO.key)
+    except Exception:
+        tz = DEFAULT_TZINFO
+    due_dt = datetime.fromisoformat(t["due_utc"])
+    if due_dt.tzinfo is None:
+        due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
+    due_local = fmt_dt_local(due_dt, tz)
     text = (
         f"📝 <b>{t['title']}</b>\n"
         f"Класс: <b>{t['class_name']}</b>\n"
-        f"Дедлайн (UTC): <code>{t['due_utc']}</code>\n\n"
+        f"Дедлайн ({tz.key}): <b>{due_local}</b>\n\n"
         f"{t['description'] or '—'}"
     )
     # <- здесь было: task_detail_kb(callback_data.page)
@@ -70,7 +85,7 @@ async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
 # -------------------------------
 async def delete_old_tasks():
     """Удаляет задачи, у которых дедлайн прошел более 168 часов назад."""
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=168)
+    cutoff_time = datetime.now(DEFAULT_TZINFO) - timedelta(hours=168)
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         # Получаем удаляемые задачи для логирования (опционально)
@@ -137,4 +152,3 @@ async def cb_add_task_pick_class(cq: CallbackQuery):
 # -------------------------------
 # Просмотр списка заданий
 # -------------------------------
-

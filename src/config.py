@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
 import dotenv
-from datetime import timedelta
+from datetime import timedelta, timezone
+from zoneinfo import ZoneInfo
 from aiogram.client.default import DefaultBotProperties
 
 dotenv.load_dotenv(os.path.abspath('.env'))
@@ -12,7 +13,17 @@ if not BOT_TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в окружении (.env)")
 
 DB_PATH = os.getenv("DB_PATH", "agent.db")
-DEFAULT_TZ = os.getenv("DEFAULT_TZ", "UTC")
+# Default timezone is UTC+5 (Etc/GMT-5 keeps a +5 offset in tzdata naming)
+DEFAULT_TZ = os.getenv("DEFAULT_TZ", "Etc/GMT-5")
+# Human-friendly label for prompts and UI
+DEFAULT_TZ_DISPLAY = os.getenv("DEFAULT_TZ_DISPLAY", "UTC+5")
+# Unified datetime format (input/output) is dd.mm.yyyy hh:mm in UTC+5 by default
+DATETIME_FORMAT = "%d.%m.%Y %H:%M"
+DATETIME_FORMAT_DISPLAY = "DD.MM.YYYY HH:MM"
+try:
+    DEFAULT_TZINFO = ZoneInfo(DEFAULT_TZ)
+except Exception:
+    DEFAULT_TZINFO = timezone(timedelta(hours=5))
 DEFAULT_MODEL = os.getenv("MODEL_NAME", "llama3:8b")
 GENAPI_TOKEN = os.getenv("GENAPI_TOKEN", "")
 
@@ -61,4 +72,3 @@ except Exception:
     ENABLE_GEN = False
     PROMPT = None
     PARSER = None
-

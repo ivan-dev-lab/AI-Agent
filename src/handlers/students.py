@@ -20,7 +20,7 @@ from db import (
     list_tasks_for_student, list_classes_for_student,
     list_teachers_for_student, upcoming_tasks_for_student, get_task_with_class
 )
-from config import DEFAULT_TZ, GENAPI_TOKEN
+from config import DEFAULT_TZ, DEFAULT_TZINFO, GENAPI_TOKEN
 from services.genapi_client import call_genapi, DEFAULT_ENDPOINT as GENAPI_ENDPOINT, _extract_content
 
 router = Router()
@@ -56,8 +56,10 @@ def _format_task_context(task_row) -> str:
     due_utc = task_row.get("due_utc")
     try:
         tz = ZoneInfo(DEFAULT_TZ)
-        due_local = datetime.fromisoformat(due_utc).astimezone(tz).strftime("%Y-%m-%d %H:%M")
-        due_str = f"{due_local} {tz.key}"
+        due_dt = datetime.fromisoformat(due_utc)
+        if due_dt.tzinfo is None:
+            due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
+        due_str = f"{fmt_dt_local(due_dt, tz)} {tz.key}"
     except Exception:
         due_str = due_utc or "Без даты"
 
@@ -335,7 +337,10 @@ async def student_schedule(cq: CallbackQuery):
         lines = []
         from datetime import datetime
         for r in rows:
-            due = datetime.fromisoformat(r["due_utc"]).astimezone(tz).strftime("%Y-%m-%d %H:%M")
+            due_dt = datetime.fromisoformat(r["due_utc"])
+            if due_dt.tzinfo is None:
+                due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
+            due = fmt_dt_local(due_dt, tz)
             lines.append(f"• {r['title']} — {r['class_name']} — {due} {tz.key}")
         text = "📆 Расписание / напоминания\n\n" + "\n".join(lines)
 
@@ -371,4 +376,3 @@ async def student_info(cq: CallbackQuery):
 
     await cq.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await cq.answer()
-

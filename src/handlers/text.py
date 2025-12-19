@@ -1,6 +1,6 @@
 # handlers/text.py
 # -*- coding: utf-8 -*-
-from datetime import datetime, timezone
+from datetime import datetime
 from zoneinfo import ZoneInfo
 import aiosqlite
 import random
@@ -8,7 +8,14 @@ import random
 from aiogram import Router, F
 from aiogram.types import Message
 
-from config import DB_PATH, DEFAULT_TZ
+from config import (
+    DB_PATH,
+    DEFAULT_TZ,
+    DEFAULT_TZINFO,
+    DEFAULT_TZ_DISPLAY,
+    DATETIME_FORMAT,
+    DATETIME_FORMAT_DISPLAY,
+)
 from db import fetchone, fetchall
 from keyboards import back_kb, single_col_kb
 from utils import fmt_dt_local
@@ -275,15 +282,15 @@ async def on_text(msg: Message):
             data["title"] = msg.text.strip()
             state["step"] = 2
             return await msg.answer(
-                "Шаг 3/4: отправьте <b>дедлайн в UTC</b> в формате <code>YYYY-MM-DD HH:MM</code>.\n"
-                "Пример: <code>2025-09-25 18:00</code>",
+                f"Шаг 3/4: отправьте <b>дедлайн в {DEFAULT_TZ_DISPLAY}</b> в формате <code>{DATETIME_FORMAT_DISPLAY}</code>.\n"
+                "Пример: <code>25.09.2025 18:00</code>",
                 reply_markup=back_kb()
             )
         elif step == 2:
             try:
-                due_utc = datetime.strptime(msg.text.strip(), "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                due_utc = datetime.strptime(msg.text.strip(), DATETIME_FORMAT).replace(tzinfo=DEFAULT_TZINFO)
             except Exception:
-                return await msg.answer("❌ Некорректная дата. Нужен формат: YYYY-MM-DD HH:MM (UTC).",
+                return await msg.answer(f"❌ Некорректная дата. Нужен формат: {DATETIME_FORMAT_DISPLAY} ({DEFAULT_TZ_DISPLAY}).",
                                         reply_markup=back_kb())
             data["due_utc"] = due_utc
             state["step"] = 3
@@ -304,14 +311,14 @@ async def on_text(msg: Message):
                     tz_name = class_row["timezone"] if "timezone" in class_row.keys() else None
                 except Exception:
                     tz_name = None
-                tz = ZoneInfo((tz_name or DEFAULT_TZ or "UTC"))
+                tz = ZoneInfo((tz_name or DEFAULT_TZ))
 
                 await db.execute(
                     "INSERT INTO tasks(class_id, title, description, due_utc, created_utc) VALUES(?, ?, ?, ?, ?)",
                     (
                         class_row["id"], data["title"], description,
-                        data["due_utc"].astimezone(timezone.utc).isoformat(),
-                        datetime.now(timezone.utc).isoformat()
+                        data["due_utc"].astimezone(DEFAULT_TZINFO).isoformat(),
+                        datetime.now(DEFAULT_TZINFO).isoformat()
                     )
                 )
                 await db.commit()

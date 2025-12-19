@@ -12,7 +12,7 @@
 3) Рассылка идёт ученикам (в ЛС), chat_id = Telegram user_id.
 
 Технически:
-- Дедлайн хранится в tasks.due_utc (ISO, UTC).
+- Дедлайн хранится в tasks.due_utc (ISO, UTC+5).
 - Получатели хранятся в task_targets (task_id, student_id). На всякий случай есть
   fallback: если targets пусты — берём учеников по enrollments для класса.
 - Планирование выполняется через APScheduler, состояния job — в таблице jobs.
@@ -21,15 +21,16 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import aiosqlite
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pytz
 
-from config import DB_PATH, REMINDER_OFFSETS, DEFAULT_TZ
+from config import DB_PATH, REMINDER_OFFSETS, DEFAULT_TZ, DEFAULT_TZINFO
 from db import fetchone, fetchall
 from utils import fmt_dt_local
 
@@ -45,9 +46,9 @@ def _class_tz(class_row: aiosqlite.Row | dict | None) -> ZoneInfo:
     except Exception:
         tz_name = None
     try:
-        return ZoneInfo(tz_name or DEFAULT_TZ or "UTC")
+        return ZoneInfo(tz_name or DEFAULT_TZ or DEFAULT_TZINFO.key)  # type: ignore[arg-type]
     except Exception:
-        return ZoneInfo("UTC")
+        return DEFAULT_TZINFO
 
 
 def _remain_text(kind: str) -> str:
@@ -62,11 +63,11 @@ def _remain_text(kind: str) -> str:
 
 
 def _parse_utc(iso: str) -> datetime:
-    """Парсит ISO-дату из БД и возвращает aware datetime в UTC."""
+    """Parse ISO datetime and return an aware value in the default timezone (UTC+5)."""
     dt = datetime.fromisoformat(iso)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=DEFAULT_TZINFO)
+    return dt.astimezone(DEFAULT_TZINFO)
 
 
 def set_bot(bot: Bot) -> None:
@@ -87,8 +88,12 @@ async def init_scheduler(bot: Bot, loop: asyncio.AbstractEventLoop | None = None
         loop = asyncio.get_running_loop()
     if SCHEDULER is None:
         # timezone влияет только на интерпретацию naive datetime.
-        # В проекте мы работаем с aware UTC dt для run_date.
-        SCHEDULER = AsyncIOScheduler(event_loop=loop, timezone=DEFAULT_TZ or "UTC")
+        # В проекте мы работаем с aware dt для run_date и базовый пояс = UTC+5.
+        try:
+            tz_for_scheduler = pytz.timezone(DEFAULT_TZ or "Etc/GMT-5")
+        except Exception:
+            tz_for_scheduler = pytz.FixedOffset(300)  # +5h
+        SCHEDULER = AsyncIOScheduler(event_loop=loop, timezone=tz_for_scheduler)
         SCHEDULER.start()
 
     await rehydrate_jobs()
@@ -169,7 +174,7 @@ async def schedule_task_jobs(task_id: int) -> None:
 
         for kind, delta in REMINDER_OFFSETS:
             run_at_utc = due_utc - delta
-            if run_at_utc <= datetime.now(timezone.utc):
+            if run_at_utc <= datetime.now(DEFAULT_TZINFO):
                 continue
 
             exists = await fetchone(
@@ -206,7 +211,7 @@ async def rehydrate_jobs() -> None:
     if SCHEDULER is None:
         return
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(DEFAULT_TZINFO).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         rows = await fetchall(db, "SELECT task_id, run_at_utc, kind FROM jobs WHERE run_at_utc > ?", (now_iso,))

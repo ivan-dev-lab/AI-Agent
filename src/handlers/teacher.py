@@ -29,7 +29,7 @@ router = Router()
 
 from zoneinfo import ZoneInfo
 from utils import fmt_dt_local
-from config import DEFAULT_TZ
+from config import DEFAULT_TZ, DEFAULT_TZINFO
 
 async def _vt_show_classes(cq: CallbackQuery):
     """Список групп учителя для просмотра заданий."""
@@ -117,6 +117,8 @@ async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: i
         marker = "👤" if t["is_for_student"] else "👥"
         try:
             due = datetime.fromisoformat(t["due_utc"])
+            if due.tzinfo is None:
+                due = due.replace(tzinfo=DEFAULT_TZINFO)
             due_local = fmt_dt_local(due, tz)
             suffix = f" · {due_local} {tz.key}"
         except Exception:
@@ -1049,6 +1051,8 @@ async def cb_t_vtask_open(cq: CallbackQuery):
     tz = ZoneInfo(DEFAULT_TZ)
     try:
         due = datetime.fromisoformat(t["due_utc"])
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=DEFAULT_TZINFO)
         due_local = fmt_dt_local(due, tz)
         due_str = f"{due_local} {tz.key}"
     except Exception:
@@ -1142,4 +1146,3 @@ async def cb_t_assign_pick_class(cq: CallbackQuery):
         reply_markup=teacher_main_kb(),
         disable_web_page_preview=True
     )
-

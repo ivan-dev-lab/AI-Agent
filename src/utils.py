@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 import re
 from io import BytesIO
-from datetime import datetime, timezone
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional
 
 import aiosqlite
 from aiogram.types import BufferedInputFile
 
-from config import DB_PATH
+from config import DB_PATH, DEFAULT_TZINFO, DATETIME_FORMAT
 
 # ---------- Formatting / helpers ----------
 
 def fmt_dt_local(dt_utc: datetime, tz: ZoneInfo) -> str:
-    return dt_utc.astimezone(tz).strftime("%Y-%m-%d %H:%M")
+    return dt_utc.astimezone(tz).strftime(DATETIME_FORMAT)
 
 def extract_code_from_markdown(md: str) -> str:
     fence = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -30,7 +30,8 @@ def make_py_document(filename: str, code_text: str) -> BufferedInputFile:
     return BufferedInputFile(bio.read(), filename=filename)
 
 def parse_utc_hhmm(s: str) -> datetime:
-    return datetime.strptime(s.strip(), "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+    """Parse datetime string using the default timezone (UTC+5)."""
+    return datetime.strptime(s.strip(), DATETIME_FORMAT).replace(tzinfo=DEFAULT_TZINFO)
 
 # ---------- DB helpers ----------
 

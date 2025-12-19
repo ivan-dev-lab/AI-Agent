@@ -3,9 +3,9 @@ import secrets          # ← добавлено
 import string           # ← добавлено
 
 from typing import Any, Iterable, Optional
-from datetime import datetime, timezone
+from datetime import datetime
 
-from config import DB_PATH, DEFAULT_TZ
+from config import DB_PATH, DEFAULT_TZ, DEFAULT_TZINFO
 
 # ---- базовые утилиты ---------------------------------------------------------
 async def fetchone(db, sql: str, params: Iterable[Any] = ()):
@@ -25,9 +25,11 @@ async def ensure_db() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         # чтобы строки были dict-like: row["col"]
         db.row_factory = aiosqlite.Row
+        default_tz_sql = (DEFAULT_TZ or "Etc/GMT-5").replace("'", "''")
         await db.executescript(
-            """
+            f"""
             PRAGMA journal_mode=WAL;
+            PRAGMA busy_timeout=5000;
 
             DROP TABLE IF EXISTS administrators;
 
@@ -35,7 +37,7 @@ async def ensure_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
                 owner_chat_id INTEGER NOT NULL,
-                timezone TEXT NOT NULL DEFAULT 'UTC'
+                timezone TEXT NOT NULL DEFAULT '{default_tz_sql}'
             );
 
             CREATE TABLE IF NOT EXISTS tasks (
@@ -82,7 +84,7 @@ async def ensure_db() -> None:
                 name        TEXT UNIQUE NOT NULL,
                 short_name  TEXT,
                 address     TEXT,
-                timezone    TEXT NOT NULL DEFAULT 'UTC',
+                timezone    TEXT NOT NULL DEFAULT '{default_tz_sql}',
                 created_utc TEXT NOT NULL,
                 updated_utc TEXT NOT NULL
             );
@@ -156,14 +158,14 @@ async def ensure_db() -> None:
         col_names = {c["name"] for c in cols} if cols else set()
         if "timezone" not in col_names:
             # DDL в SQLite проще делать через format c безопасным экранированием.
-            tz = (DEFAULT_TZ or "UTC").replace("'", "''")
+            tz = (DEFAULT_TZ or "Etc/GMT-5").replace("'", "''")
             await db.execute(
                 f"ALTER TABLE classes ADD COLUMN timezone TEXT NOT NULL DEFAULT '{tz}'"
             )
         # нормализуем пустые значения
         await db.execute(
             "UPDATE classes SET timezone = ? WHERE timezone IS NULL OR timezone = ''",
-            (DEFAULT_TZ or "UTC",),
+            (DEFAULT_TZ or "Etc/GMT-5",),
         )
 
         await db.commit()
@@ -184,10 +186,10 @@ async def create_school(
     name: str,
     short_name: Optional[str],
     address: Optional[str],
-    tz: str = "UTC",
+    tz: str = DEFAULT_TZ,
 ) -> int:
     """Создать учебное заведение. Возвращает id."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(DEFAULT_TZINFO).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
@@ -224,7 +226,7 @@ async def update_school_field(school_id: int, field: str, value) -> None:
     if field not in allowed:
         raise ValueError("Unsupported field")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(DEFAULT_TZINFO).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         if value is None and field in {"short_name", "address"}:
@@ -267,7 +269,7 @@ import string
 async def create_pending_la(user_id: int, school_id: int) -> str:
     """Создаёт запись в pending_local_admins и возвращает пароль."""
     password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(DEFAULT_TZINFO).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """
@@ -322,7 +324,7 @@ async def create_pending_student(
     Логика как в учителе.
     """
     token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(DEFAULT_TZINFO).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """
@@ -403,7 +405,7 @@ async def get_task_with_class(task_id: int) -> Optional[aiosqlite.Row]:
             db,
             """
             SELECT t.id AS task_id, t.title, t.description, t.due_utc,
-                   c.id AS class_id, c.name AS class_name
+                   c.id AS class_id, c.name AS class_name, c.timezone AS timezone
             FROM tasks t
             JOIN classes c ON c.id = t.class_id
             WHERE t.id = ?
@@ -640,7 +642,7 @@ import string
 
 async def create_pending_student(display_name: str, class_id: int, created_by: int | None = None) -> str:
     token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(DEFAULT_TZINFO).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """
@@ -733,7 +735,7 @@ async def get_task_with_class(task_id: int) -> Optional[aiosqlite.Row]:
             db,
             """
             SELECT t.id AS task_id, t.title, t.description, t.due_utc,
-                   c.id AS class_id, c.name AS class_name
+                   c.id AS class_id, c.name AS class_name, c.timezone AS timezone
             FROM tasks t
             JOIN classes c ON c.id = t.class_id
             WHERE t.id = ?
@@ -812,7 +814,7 @@ async def upcoming_tasks_for_student(student_id: int, limit: int = 10) -> list:
 async def seed_test_data(
     user_records: Optional[Iterable[Tuple[int, str, str, int]]] = None,
 ) -> None:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(DEFAULT_TZINFO).isoformat()
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -925,7 +927,7 @@ async def seed_test_data(
                     cid,
                     "Домашнее задание №1",
                     "Сделать упражнение 1–10.",
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(DEFAULT_TZINFO).isoformat(),
                     now,
                 ),
             )
@@ -938,7 +940,7 @@ async def seed_test_data(
                     cid,
                     "Контрольная работа",
                     "Подготовиться к контрольной.",
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(DEFAULT_TZINFO).isoformat(),
                     now,
                 ),
             )
