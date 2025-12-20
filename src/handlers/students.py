@@ -27,6 +27,37 @@ router = Router()
 logger = logging.getLogger(__name__)
 PAGE_SIZE = 8
 
+# --- Helpers for student task view ---
+def _format_task_due(due_iso: str | None, class_tz: str | None) -> str:
+    """Форматирует дедлайн задачи в часовом поясе класса."""
+    try:
+        tz = ZoneInfo(class_tz or DEFAULT_TZ)
+    except Exception:
+        tz = DEFAULT_TZINFO
+    try:
+        dt = datetime.fromisoformat(due_iso) if due_iso else None
+        if dt and dt.tzinfo is None:
+            dt = dt.replace(tzinfo=DEFAULT_TZINFO)
+        return f"{fmt_dt_local(dt, tz)} {tz.key}" if dt else "—"
+    except Exception:
+        return due_iso or "—"
+
+
+def _tasks_list_text(tasks: list, page: int) -> str:
+    if not tasks:
+        return "📋 Мои задания\n\nПока заданий нет."
+
+    start_idx = page * PAGE_SIZE + 1
+    lines = []
+    for idx, row in enumerate(tasks, start_idx):
+        row_map = dict(row)
+        title = row_map.get("title") or "Без названия"
+        due_str = _format_task_due(row_map.get("due_utc"), row_map.get("class_tz"))
+        lines.append(f"{idx}. {title}\nДедлайн: {due_str}")
+
+    return "📋 Мои задания\n\n" + "\n\n".join(lines)
+
+
 # === GenAPI (deepseek-v3) ===
 GENAPI_FALLBACK_TOKEN = "sk-v6FKLfILfda7HreS8zOPZ5Rcp8hcJBeNJnX1QZoiS7H2H5QOta9j9FXFS1nM"
 
@@ -144,11 +175,7 @@ async def student_tasks_entry(cq: CallbackQuery):
         return
     page = 0
     tasks, has_next = await list_tasks_for_student(cq.from_user.id, limit=PAGE_SIZE, offset=0)
-    text = (
-        "📋 Мои задания\n\nВыбирай задание, чтобы открыть подробности или спросить учителя/нейросеть."
-        if tasks else
-        "📋 Мои задания\n\nПока заданий нет."
-    )
+    text = _tasks_list_text(tasks, page)
     await cq.message.edit_text(text, reply_markup=tasks_list_kb(tasks, page, has_next))
     await cq.answer()
 
@@ -160,11 +187,7 @@ async def student_tasks_paged(cq: CallbackQuery, callback_data: StudentCB):
     page = callback_data.page or 0
     offset = page * PAGE_SIZE
     tasks, has_next = await list_tasks_for_student(cq.from_user.id, limit=PAGE_SIZE, offset=offset)
-    text = (
-        "📋 Мои задания\n\nВыбирай задание, чтобы открыть подробности или спросить учителя/нейросеть."
-        if tasks else
-        "📋 Мои задания\n\nПока заданий нет."
-    )
+    text = _tasks_list_text(tasks, page)
     await cq.message.edit_text(text, reply_markup=tasks_list_kb(tasks, page, has_next))
     await cq.answer()
 

@@ -91,7 +91,7 @@ def tasks_list_kb(tasks: list, page: int, has_next: bool) -> InlineKeyboardMarku
     kb = InlineKeyboardBuilder()
     for row in tasks:
         kb.button(
-            text=f"• {row['title']} ({row['class_name']})"[:64],
+            text=row["title"][:64],
             callback_data=TaskCB(action="detail", task_id=row["task_id"], page=page).pack()
         )
     nav = []
@@ -158,7 +158,7 @@ def tasks_list_kb(tasks: list, page: int, has_next: bool) -> InlineKeyboardMarku
     kb = InlineKeyboardBuilder()
     for row in tasks:
         kb.button(
-            text=f"• {row['title']} ({row['class_name']})"[:64],
+            text=row["title"][:64],
             callback_data=TaskCB(action="detail", task_id=row["task_id"], page=page).pack()
         )
     nav = []

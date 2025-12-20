@@ -386,7 +386,7 @@ async def list_tasks_for_student(student_id: int, limit: int = 10, offset: int =
             db,
             """
             SELECT t.id AS task_id, t.title, t.description, t.due_utc,
-                   c.id AS class_id, c.name AS class_name
+                   c.id AS class_id, c.name AS class_name, c.timezone AS class_tz
             FROM enrollments e
             JOIN classes c ON c.id = e.class_id
             JOIN tasks   t ON t.class_id = c.id
@@ -702,7 +702,8 @@ async def list_tasks_for_student(student_id: int, limit: int = 10, offset: int =
                 t.description,
                 t.due_utc,
                 c.id   AS class_id,
-                c.name AS class_name
+                c.name AS class_name,
+                c.timezone AS class_tz
             FROM enrollments e
             JOIN classes c ON c.id = e.class_id
             JOIN tasks   t ON t.class_id = c.id

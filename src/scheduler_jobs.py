@@ -27,12 +27,14 @@ from zoneinfo import ZoneInfo
 import aiosqlite
 from aiogram import Bot
 from aiogram.enums import ParseMode
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 
 from config import DB_PATH, REMINDER_OFFSETS, DEFAULT_TZ, DEFAULT_TZINFO
 from db import fetchone, fetchall
 from utils import fmt_dt_local
+from callbacks import CB_BACK
 
 
 BOT: Bot | None = None
@@ -150,11 +152,14 @@ async def send_task_assigned_notification(task_id: int, student_ids: list[int] |
         f"Дедлайн: <b>{due_local_str} {tz.key}</b>\n"
         f"\n<b>Описание:</b> {task['description'] or '—'}"
     )
+    main_menu_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data=CB_BACK)]
+    ])
 
     # отправляем в ЛС ученикам; ошибки гасим, чтобы не ронять основной поток
     for uid in sorted(set(int(x) for x in (targets or []))):
         try:
-            await BOT.send_message(chat_id=uid, text=text, parse_mode=ParseMode.HTML)
+            await BOT.send_message(chat_id=uid, text=text, parse_mode=ParseMode.HTML, reply_markup=main_menu_kb)
         except Exception:
             pass
 

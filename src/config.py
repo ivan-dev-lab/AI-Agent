@@ -45,18 +45,7 @@ try:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_community.chat_models import ChatOllama
 
-    SYSTEM_PROMPT = """\
-You are an expert MicroPython tutor for ESP32-based educational robotics.
-Your job: generate clean, safe, well-commented MicroPython code **first**, then include a short explanation at the end.
-Constraints and style:
-- Target platform: ESP32 with MicroPython standard modules only (machine, time, PWM etc.). Avoid uasyncio unless explicitly requested.
-- No external libraries. No network unless explicitly requested.
-- Always declare GPIO pins as named constants at the top (e.g., LED_PIN = 2).
-- Use clear function structure, docstrings, and step-by-step comments for students.
-- Add a short "Test Instructions" section as comments.
-- If hardware is ambiguous, make safe assumptions and clearly list them in comments.
-Return code enclosed in Markdown triple backticks with language 'python', then the explanation.
-"""
+    SYSTEM_PROMPT = "Ты - лучший помощник по школьным вопросам. Общайся вежливо, уважительно и профессионально"
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
         ("human",
