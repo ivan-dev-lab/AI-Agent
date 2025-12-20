@@ -140,9 +140,16 @@ CB_T_TASK_BACK_STUS    = "t_task_back_stus:"         # +<class_id> — наза�
 
 # --- Просмотр заданий учителем ---
 CB_T_VTASK_PICK_CLS      = "t_vtask_pick_cls:"       # +<class_id>
+CB_T_VTASK_CLASS_MENU    = "t_vtask_class_menu:"     # +<class_id>
 CB_T_VTASK_PICK_STU      = "t_vtask_pick_stu:"       # +<student_id>:<class_id>
 CB_T_VTASK_OPEN          = "t_vtask_open:"           # +<task_id>:<student_id>:<class_id>
+CB_T_VTASK_GROUP_TASKS   = "t_vtask_group_tasks:"    # +<class_id>
+CB_T_VTASK_STUDENTS      = "t_vtask_students:"       # +<class_id>
 
 CB_T_VTASK_BACK_CLASSES  = "t_vtask_back_classes"    # назад к списку групп
 CB_T_VTASK_BACK_STUDENTS = "t_vtask_back_students:"  # +<class_id> — назад к ученикам
 CB_T_VTASK_BACK_TASKS    = "t_vtask_back_tasks:"     # +<student_id>:<class_id> — назад к списку задач ученика
+CB_T_VTASK_EDIT_TITLE    = "t_vtask_edit_title:"     # +<task_id>:<student_id>:<class_id>
+CB_T_VTASK_EDIT_DESC     = "t_vtask_edit_desc:"      # +<task_id>:<student_id>:<class_id>
+CB_T_VTASK_DELETE        = "t_vtask_delete:"         # +<task_id>:<student_id>:<class_id>
+

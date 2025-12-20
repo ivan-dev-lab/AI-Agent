@@ -75,7 +75,6 @@ def _gen_user_id() -> int:
 @router.message(F.text)
 async def on_text(msg: Message):
     # DEBUG: маяк, чтобы понять, доходит ли вообще сюда управление
-    print("on_text CALLED:", msg.from_user.id)
 
     if get_auth_state(msg.from_user.id) == "await_la_password":
         return await _handle_la_password_input(msg)
@@ -255,6 +254,44 @@ async def on_text(msg: Message):
             reply_markup=single_col_kb(rows)
         )
         # ---------- TEACHER: GROUP RENAME ----------
+    if mode in {"t_edit_task_title", "t_edit_task_desc"}:
+        task_id = state.get("task_id")
+        class_id = state.get("class_id")
+
+        if not task_id or not class_id:
+            USER_STATE.pop(msg.from_user.id, None)
+            return await msg.answer("❌ Не найден контекст задачи.", reply_markup=back_kb())
+
+        new_text = msg.text.strip()
+        if mode == "t_edit_task_title" and not new_text:
+            return await msg.answer("❗️Название не может быть пустым. Введите новое название:", reply_markup=back_kb())
+
+        if mode == "t_edit_task_desc" and new_text == "-":
+            new_text = ""
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            owned = await fetchone(
+                db,
+                """
+                SELECT t.id FROM tasks t
+                JOIN classes c ON c.id = t.class_id
+                WHERE t.id = ? AND t.class_id = ? AND c.owner_chat_id = ?
+                """,
+                (task_id, class_id, msg.from_user.id)
+            )
+            if not owned:
+                USER_STATE.pop(msg.from_user.id, None)
+                return await msg.answer("❌ Задача не найдена или нет прав.", reply_markup=back_kb())
+
+            if mode == "t_edit_task_title":
+                await db.execute("UPDATE tasks SET title=? WHERE id=?", (new_text, task_id))
+            else:
+                await db.execute("UPDATE tasks SET description=? WHERE id=?", (new_text, task_id))
+            await db.commit()
+
+        USER_STATE.pop(msg.from_user.id, None)
+        return await msg.answer("✅ Задача обновлена.", reply_markup=back_kb())
     if mode == "t_group_rename":
         new_name = msg.text.strip()
         class_id = state.get("class_id")
