@@ -123,12 +123,12 @@ def la_panel_kb() -> InlineKeyboardMarkup:
 
 def la_core_kb() -> InlineKeyboardMarkup:
     rows = [
-        ('Create school and self-assign', CB_LA_CREATE_SCHOOL),
-        ('Assign teacher', CB_LA_ASSIGN_TEACHER),
-        ('Assign student', CB_LA_ASSIGN_STUDENT),
-        ('Edit teachers', CB_LA_EDIT_TEACHERS),
-        ('Edit students', CB_LA_EDIT_STUDENTS),
-        ('Back to sections', CB_LA_BACK_TO_CORE),
+        ('🏫 Создать школу и назначить себя', CB_LA_CREATE_SCHOOL),
+        ('👩‍🏫 Назначить учителя', CB_LA_ASSIGN_TEACHER),
+        ('👨‍🎓 Назначить ученика', CB_LA_ASSIGN_STUDENT),
+        ('✏️ Редактировать учителей', CB_LA_EDIT_TEACHERS),
+        ('📚 Редактировать учеников', CB_LA_EDIT_STUDENTS),
+        ('↩️ Назад к разделам', CB_LA_BACK_TO_CORE),
     ]
     return single_col_kb(rows)
 
