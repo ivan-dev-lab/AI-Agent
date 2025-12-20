@@ -20,7 +20,7 @@ from config import (
 from db import fetchone, fetchall, ensure_user_with_post
 from keyboards import back_kb, single_col_kb
 from utils import fmt_dt_local, get_auth_state, pop_auth_state
-from scheduler_jobs import schedule_task_jobs, send_task_assigned_notification
+from scheduler_jobs import schedule_task_jobs, send_task_assigned_notification, send_task_updated_notification
 from callbacks import (
     CB_STU_AFTER_ADD_SKIP,
     CB_ENROLL_PICK_CLS, CB_LA_ASSIGN_PICK_CLS,
@@ -303,12 +303,25 @@ async def on_text(msg: Message):
                 )
             await db.commit()
 
+            # Определяем, кого уведомлять: таргеты, иначе вся группа
+            rows = await fetchall(db, "SELECT student_id FROM task_targets WHERE task_id = ?", (task_id,))
+            targets = [int(r["student_id"]) for r in rows] if rows else []
+            if not targets:
+                rows = await fetchall(db, "SELECT student_id FROM enrollments WHERE class_id = ?", (class_id,))
+                targets = [int(r["student_id"]) for r in rows] if rows else []
+
         kb = single_col_kb([
             ("🏠 В главное меню", CB_BACK),
             ("↩️ В меню задания", f"{CB_T_VTASK_OPEN}{task_id}:{state.get('student_id', 0)}:{class_id}"),
         ])
 
         USER_STATE.pop(msg.from_user.id, None)
+        # Уведомляем учащихся об обновлении
+        if targets:
+            try:
+                await send_task_updated_notification(task_id, targets)
+            except Exception:
+                pass
         return await msg.answer("✅ Задача обновлена.", reply_markup=kb)
     if mode == "t_group_rename":
         new_name = msg.text.strip()

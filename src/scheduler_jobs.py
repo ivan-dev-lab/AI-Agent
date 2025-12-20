@@ -159,6 +159,42 @@ async def send_task_assigned_notification(task_id: int, student_ids: list[int] |
             pass
 
 
+async def send_task_updated_notification(task_id: int, student_ids: list[int] | None = None) -> None:
+    """Уведомление ученикам: задание обновлено (название/описание/дедлайн)."""
+    if BOT is None:
+        return
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        task = await fetchone(db, "SELECT * FROM tasks WHERE id = ?", (task_id,))
+        if not task:
+            return
+        class_row = await fetchone(db, "SELECT * FROM classes WHERE id = ?", (task["class_id"],))
+        if not class_row:
+            return
+
+        tz = _class_tz(class_row)
+        due_utc = _parse_utc(task["due_utc"])
+        due_local_str = fmt_dt_local(due_utc, tz)
+
+        targets = student_ids
+        if targets is None:
+            targets = await _get_target_student_ids(db, task_id, class_row["id"])
+
+    text = (
+        "✏️ <b>Задание обновлено</b>\n"
+        f"Группа: <b>{class_row['name']}</b>\n"
+        f"Задание: <b>{task['title']}</b>\n"
+        f"Дедлайн: <b>{due_local_str} {tz.key}</b>\n"
+        f"\n<b>Описание:</b> {task['description'] or '—'}"
+    )
+
+    for uid in sorted(set(int(x) for x in (targets or []))):
+        try:
+            await BOT.send_message(chat_id=uid, text=text, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
+
 async def schedule_task_jobs(task_id: int) -> None:
     """Планирует напоминания по конкретной задаче в APScheduler и фиксирует их в jobs."""
     if SCHEDULER is None:
