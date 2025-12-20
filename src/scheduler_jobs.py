@@ -33,7 +33,7 @@ import pytz
 
 from config import DB_PATH, REMINDER_OFFSETS, DEFAULT_TZ, DEFAULT_TZINFO
 from db import fetchone, fetchall
-from utils import fmt_dt_local
+from utils import fmt_dt_local, fmt_tz_label
 from callbacks import CB_BACK
 
 
@@ -144,12 +144,13 @@ async def send_task_assigned_notification(task_id: int, student_ids: list[int] |
             targets = await _get_target_student_ids(db, task_id, class_row["id"])
 
     teacher_part = f"Учитель: <b>{teacher_name}</b>\n" if teacher_name else ""
+    deadline_str = f"{due_local_str} {fmt_tz_label(tz)}".strip()
     text = (
         "📌 <b>Назначено новое задание</b>\n"
         f"{teacher_part}"
         f"Группа: <b>{class_row['name']}</b>\n"
         f"Задание: <b>{task['title']}</b>\n"
-        f"Дедлайн: <b>{due_local_str} {tz.key}</b>\n"
+        f"Дедлайн: <b>{deadline_str}</b>\n"
         f"\n<b>Описание:</b> {task['description'] or '—'}"
     )
     main_menu_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -186,11 +187,12 @@ async def send_task_updated_notification(task_id: int, student_ids: list[int] | 
         if targets is None:
             targets = await _get_target_student_ids(db, task_id, class_row["id"])
 
+    deadline_str = f"{due_local_str} {fmt_tz_label(tz)}".strip()
     text = (
         "✏️ <b>Задание обновлено</b>\n"
         f"Группа: <b>{class_row['name']}</b>\n"
         f"Задание: <b>{task['title']}</b>\n"
-        f"Дедлайн: <b>{due_local_str} {tz.key}</b>\n"
+        f"Дедлайн: <b>{deadline_str}</b>\n"
         f"\n<b>Описание:</b> {task['description'] or '—'}"
     )
 
@@ -298,11 +300,12 @@ async def send_deadline_reminder_job(task_id: int, kind: str) -> None:
         targets = await _get_target_student_ids(db, task_id, class_row["id"])
 
     remain = _remain_text(kind)
+    deadline_str = f"{due_local_str} {fmt_tz_label(tz)}".strip()
     text = (
         f"⏰ <b>Напоминание</b>\n"
         f"До дедлайна задания <b>{task['title']}</b> осталось <b>{remain}</b>.\n"
         f"Группа: <b>{class_row['name']}</b>\n"
-        f"Дедлайн: <b>{due_local_str} {tz.key}</b>"
+        f"Дедлайн: <b>{deadline_str}</b>"
     )
 
     for uid in sorted(set(int(x) for x in (targets or []))):

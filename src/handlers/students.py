@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from zoneinfo import ZoneInfo
 
-from utils import ensure_role, fmt_dt_local
+from utils import ensure_role, fmt_dt_local, fmt_tz_label
 from callbacks import (
     CB_STU_MENU, CB_STU_TASKS, CB_STU_TEACHERS, CB_STU_GROUPS, CB_STU_SCHEDULE, CB_STU_INFO, CB_BACK, StudentCB, TaskCB
 )
@@ -38,7 +38,8 @@ def _format_task_due(due_iso: str | None, class_tz: str | None) -> str:
         dt = datetime.fromisoformat(due_iso) if due_iso else None
         if dt and dt.tzinfo is None:
             dt = dt.replace(tzinfo=DEFAULT_TZINFO)
-        return f"{fmt_dt_local(dt, tz)} {tz.key}" if dt else "—"
+        label = fmt_tz_label(tz)
+        return f"{fmt_dt_local(dt, tz)} {label}".strip() if dt else "—"
     except Exception:
         return due_iso or "—"
 
@@ -90,7 +91,7 @@ def _format_task_context(task_row) -> str:
         due_dt = datetime.fromisoformat(due_utc)
         if due_dt.tzinfo is None:
             due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
-        due_str = f"{fmt_dt_local(due_dt, tz)} {tz.key}"
+        due_str = f"{fmt_dt_local(due_dt, tz)} {fmt_tz_label(tz)}".strip()
     except Exception:
         due_str = due_utc or "Без даты"
 
@@ -364,7 +365,7 @@ async def student_schedule(cq: CallbackQuery):
             if due_dt.tzinfo is None:
                 due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
             due = fmt_dt_local(due_dt, tz)
-            lines.append(f"• {r['title']} — {r['class_name']} — {due} {tz.key}")
+            lines.append(f"• {r['title']} — {r['class_name']} — {due} {fmt_tz_label(tz)}".strip())
         text = "📆 Расписание / напоминания\n\n" + "\n".join(lines)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[

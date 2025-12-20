@@ -30,7 +30,7 @@ from callbacks import (
 router = Router()
 
 from zoneinfo import ZoneInfo
-from utils import fmt_dt_local
+from utils import fmt_dt_local, fmt_tz_label
 from config import DEFAULT_TZ, DEFAULT_TZINFO, DATETIME_FORMAT, DEFAULT_TZ_DISPLAY
 
 async def _vt_show_classes(cq: CallbackQuery):
@@ -172,7 +172,7 @@ async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: i
             if due.tzinfo is None:
                 due = due.replace(tzinfo=DEFAULT_TZINFO)
             due_local = fmt_dt_local(due, tz)
-            suffix = f" · {due_local} {tz.key}"
+            suffix = f" · {due_local} {fmt_tz_label(tz)}".strip()
         except Exception:
             suffix = ""
 
@@ -1117,7 +1117,7 @@ async def cb_t_vtask_open(cq: CallbackQuery):
         if due.tzinfo is None:
             due = due.replace(tzinfo=DEFAULT_TZINFO)
         due_local = fmt_dt_local(due, tz)
-        due_str = f"{due_local} {tz.key}"
+        due_str = f"{due_local} {fmt_tz_label(tz)}".strip()
     except Exception:
         due_str = t["due_utc"] or "-"
 

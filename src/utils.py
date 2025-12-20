@@ -15,6 +15,37 @@ from config import DB_PATH, DEFAULT_TZINFO, DATETIME_FORMAT
 def fmt_dt_local(dt_utc: datetime, tz: ZoneInfo) -> str:
     return dt_utc.astimezone(tz).strftime(DATETIME_FORMAT)
 
+
+def fmt_tz_label(tz: ZoneInfo | None) -> str:
+    """
+    Возвращает человекочитаемое обозначение часового пояса.
+    Для служебных зон вида Etc/GMT-5 выводим UTC+5 вместо сырого ключа.
+    """
+    if tz is None:
+        tz = DEFAULT_TZINFO
+    try:
+        key = getattr(tz, "key", "") or ""
+    except Exception:
+        key = ""
+
+    if key.startswith("Etc/GMT") or not key:
+        try:
+            now = datetime.now(tz)
+            offset = tz.utcoffset(now)
+            if offset is None:
+                return ""
+            total_minutes = int(offset.total_seconds() // 60)
+            sign = "+" if total_minutes >= 0 else "-"
+            total_minutes = abs(total_minutes)
+            hours, minutes = divmod(total_minutes, 60)
+            if minutes:
+                return f"UTC{sign}{hours:02d}:{minutes:02d}"
+            return f"UTC{sign}{hours}"
+        except Exception:
+            return ""
+
+    return key
+
 def extract_code_from_markdown(md: str) -> str:
     fence = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
     m = fence.search(md)
