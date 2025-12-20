@@ -24,6 +24,7 @@ from scheduler_jobs import schedule_task_jobs, send_task_assigned_notification
 from callbacks import (
     CB_STU_AFTER_ADD_SKIP,
     CB_ENROLL_PICK_CLS, CB_LA_ASSIGN_PICK_CLS,
+    CB_BACK, CB_T_VTASK_OPEN,
 )
 from callbacks import CB_T_ASSIGN_PICK_CLS
 
@@ -254,7 +255,7 @@ async def on_text(msg: Message):
             reply_markup=single_col_kb(rows)
         )
         # ---------- TEACHER: GROUP RENAME ----------
-    if mode in {"t_edit_task_title", "t_edit_task_desc"}:
+    if mode in {"t_edit_task_title", "t_edit_task_desc", "t_edit_task_deadline"}:
         task_id = state.get("task_id")
         class_id = state.get("class_id")
 
@@ -262,12 +263,12 @@ async def on_text(msg: Message):
             USER_STATE.pop(msg.from_user.id, None)
             return await msg.answer("❌ Не найден контекст задачи.", reply_markup=back_kb())
 
-        new_text = msg.text.strip()
-        if mode == "t_edit_task_title" and not new_text:
+        raw_text = msg.text.strip()
+        if mode == "t_edit_task_title" and not raw_text:
             return await msg.answer("❗️Название не может быть пустым. Введите новое название:", reply_markup=back_kb())
 
-        if mode == "t_edit_task_desc" and new_text == "-":
-            new_text = ""
+        if mode == "t_edit_task_desc" and raw_text == "-":
+            raw_text = ""
 
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
@@ -285,13 +286,30 @@ async def on_text(msg: Message):
                 return await msg.answer("❌ Задача не найдена или нет прав.", reply_markup=back_kb())
 
             if mode == "t_edit_task_title":
-                await db.execute("UPDATE tasks SET title=? WHERE id=?", (new_text, task_id))
+                await db.execute("UPDATE tasks SET title=? WHERE id=?", (raw_text, task_id))
+            elif mode == "t_edit_task_desc":
+                await db.execute("UPDATE tasks SET description=? WHERE id=?", (raw_text, task_id))
             else:
-                await db.execute("UPDATE tasks SET description=? WHERE id=?", (new_text, task_id))
+                try:
+                    due_utc = datetime.strptime(raw_text, DATETIME_FORMAT).replace(tzinfo=DEFAULT_TZINFO)
+                except Exception:
+                    return await msg.answer(
+                        f"❌ Формат неверный. Используйте {DATETIME_FORMAT_DISPLAY} ({DEFAULT_TZ_DISPLAY}).",
+                        reply_markup=back_kb()
+                    )
+                await db.execute(
+                    "UPDATE tasks SET due_utc=? WHERE id=?",
+                    (due_utc.astimezone(DEFAULT_TZINFO).isoformat(), task_id)
+                )
             await db.commit()
 
+        kb = single_col_kb([
+            ("🏠 В главное меню", CB_BACK),
+            ("↩️ В меню задания", f"{CB_T_VTASK_OPEN}{task_id}:{state.get('student_id', 0)}:{class_id}"),
+        ])
+
         USER_STATE.pop(msg.from_user.id, None)
-        return await msg.answer("✅ Задача обновлена.", reply_markup=back_kb())
+        return await msg.answer("✅ Задача обновлена.", reply_markup=kb)
     if mode == "t_group_rename":
         new_name = msg.text.strip()
         class_id = state.get("class_id")

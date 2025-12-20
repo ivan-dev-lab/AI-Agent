@@ -23,7 +23,7 @@ from callbacks import (
     CB_T_VTASK_PICK_CLS, CB_T_VTASK_CLASS_MENU, CB_T_VTASK_GROUP_TASKS, CB_T_VTASK_STUDENTS,
     CB_T_VTASK_PICK_STU, CB_T_VTASK_OPEN,
     CB_T_VTASK_BACK_CLASSES, CB_T_VTASK_BACK_STUDENTS, CB_T_VTASK_BACK_TASKS,
-    CB_T_VTASK_EDIT_TITLE, CB_T_VTASK_EDIT_DESC, CB_T_VTASK_DELETE,
+    CB_T_VTASK_EDIT_TITLE, CB_T_VTASK_EDIT_DESC, CB_T_VTASK_EDIT_DEADLINE, CB_T_VTASK_DELETE,
 )
 
 
@@ -31,7 +31,7 @@ router = Router()
 
 from zoneinfo import ZoneInfo
 from utils import fmt_dt_local
-from config import DEFAULT_TZ, DEFAULT_TZINFO
+from config import DEFAULT_TZ, DEFAULT_TZINFO, DATETIME_FORMAT, DEFAULT_TZ_DISPLAY
 
 async def _vt_show_classes(cq: CallbackQuery):
     """Список групп учителя для просмотра заданий."""
@@ -1127,6 +1127,7 @@ async def cb_t_vtask_open(cq: CallbackQuery):
     rows = [
         ("✏️ Изменить название", f"{CB_T_VTASK_EDIT_TITLE}{task_id}:{student_id}:{class_id}"),
         ("📝 Изменить описание", f"{CB_T_VTASK_EDIT_DESC}{task_id}:{student_id}:{class_id}"),
+        ("⏰ Изменить дедлайн", f"{CB_T_VTASK_EDIT_DEADLINE}{task_id}:{student_id}:{class_id}"),
         ("🗑 Удалить задание",   f"{CB_T_VTASK_DELETE}{task_id}:{student_id}:{class_id}"),
     ]
     if student_id == 0:
@@ -1209,6 +1210,39 @@ async def cb_t_vtask_edit_desc(cq: CallbackQuery):
         "class_id": class_id,
     }
     await cq.message.edit_text("Введите новое описание задания (\"-\" чтобы очистить):", reply_markup=back_kb())
+
+
+@router.callback_query(F.data.startswith(CB_T_VTASK_EDIT_DEADLINE))
+async def cb_t_vtask_edit_deadline(cq: CallbackQuery):
+    if not await ensure_authorized(cq.from_user.id, cq): return
+    if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
+    try:
+        payload = cq.data.split(":", 1)[1]
+        t_str, stu_str, cls_str = payload.split(":")
+        task_id = int(t_str); student_id = int(stu_str); class_id = int(cls_str)
+    except Exception:
+        return await cq.answer("Некорректные данные", show_alert=True)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        owned = await fetchone(
+            db,
+            "SELECT t.id FROM tasks t JOIN classes c ON c.id=t.class_id WHERE t.id=? AND t.class_id=? AND c.owner_chat_id=?",
+            (task_id, class_id, cq.from_user.id)
+        )
+    if not owned:
+        return await cq.answer("Нет доступа к задаче.", show_alert=True)
+
+    USER_STATE[cq.from_user.id] = {
+        "mode": "t_edit_task_deadline",
+        "task_id": task_id,
+        "student_id": student_id,
+        "class_id": class_id,
+    }
+    await cq.message.edit_text(
+        f"Введите новый дедлайн в формате {DATETIME_FORMAT} ({DEFAULT_TZ_DISPLAY}).\nНапример: 25.09.2025 18:00",
+        reply_markup=back_kb()
+    )
 
 
 @router.callback_query(F.data.startswith(CB_T_VTASK_DELETE))

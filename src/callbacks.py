@@ -145,6 +145,7 @@ CB_T_VTASK_PICK_STU      = "t_vtask_pick_stu:"       # +<student_id>:<class_id>
 CB_T_VTASK_OPEN          = "t_vtask_open:"           # +<task_id>:<student_id>:<class_id>
 CB_T_VTASK_GROUP_TASKS   = "t_vtask_group_tasks:"    # +<class_id>
 CB_T_VTASK_STUDENTS      = "t_vtask_students:"       # +<class_id>
+CB_T_VTASK_EDIT_DEADLINE = "t_vtask_edit_deadline:"  # +<task_id>:<student_id>:<class_id>
 
 CB_T_VTASK_BACK_CLASSES  = "t_vtask_back_classes"    # назад к списку групп
 CB_T_VTASK_BACK_STUDENTS = "t_vtask_back_students:"  # +<class_id> — назад к ученикам
