@@ -2,6 +2,7 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 import aiosqlite
+from datetime import datetime
 
 from handlers.text import USER_STATE
 from config import DB_PATH
@@ -30,8 +31,24 @@ from callbacks import (
 router = Router()
 
 from zoneinfo import ZoneInfo
-from utils import fmt_dt_local, fmt_tz_label
+from utils import fmt_dt_local
 from config import DEFAULT_TZ, DEFAULT_TZINFO, DATETIME_FORMAT, DEFAULT_TZ_DISPLAY
+
+def _format_due_simple(due_raw: str | None) -> str:
+    """Форматирует дедлайн в виде dd.mm.yyyy hh:mm без вывода пояса."""
+    if not due_raw:
+        return "-"
+    try:
+        s = due_raw.strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=DEFAULT_TZINFO)
+        tz = ZoneInfo(DEFAULT_TZ)
+        return fmt_dt_local(dt, tz)
+    except Exception:
+        return due_raw
 
 async def _vt_show_classes(cq: CallbackQuery):
     """Список групп учителя для просмотра заданий."""
@@ -126,8 +143,13 @@ async def _vt_show_group_tasks(cq: CallbackQuery, class_id: int, desc_limit: int
     lines_out = []
     for idx, t in enumerate(tasks, 1):
         desc = short(t['description'])
-        suffix = f" — {desc}" if desc else ""
-        lines_out.append(f"{idx}. {t['title']}{suffix}")
+        try:
+            due_local = _format_due_simple(t["due_utc"])
+        except Exception:
+            due_local = t.get("due_utc")
+        suffix_desc = f" — {desc}" if desc else ""
+        suffix_due = f" · {due_local}" if due_local else ""
+        lines_out.append(f"{idx}. {t['title']}{suffix_due}{suffix_desc}")
         rows.append((t["title"], f"{CB_T_VTASK_OPEN}{t['id']}:0:{class_id}"))
 
     rows.append(("⬅ Назад к меню группы", f"{CB_T_VTASK_CLASS_MENU}{class_id}"))
@@ -168,11 +190,8 @@ async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: i
     for idx, t in enumerate(tasks, 1):
         marker = "👤"  # индивидуальное
         try:
-            due = datetime.fromisoformat(t["due_utc"])
-            if due.tzinfo is None:
-                due = due.replace(tzinfo=DEFAULT_TZINFO)
-            due_local = fmt_dt_local(due, tz)
-            suffix = f" · {due_local} {fmt_tz_label(tz)}".strip()
+            due_local = _format_due_simple(t["due_utc"])
+            suffix = f" · {due_local}" if due_local else ""
         except Exception:
             suffix = ""
 
@@ -1111,13 +1130,8 @@ async def cb_t_vtask_open(cq: CallbackQuery):
     if not t:
         return await cq.answer("Задание не найдено.", show_alert=True)
 
-    tz = ZoneInfo(DEFAULT_TZ)
     try:
-        due = datetime.fromisoformat(t["due_utc"])
-        if due.tzinfo is None:
-            due = due.replace(tzinfo=DEFAULT_TZINFO)
-        due_local = fmt_dt_local(due, tz)
-        due_str = f"{due_local} {fmt_tz_label(tz)}".strip()
+        due_str = _format_due_simple(t["due_utc"])
     except Exception:
         due_str = t["due_utc"] or "-"
 

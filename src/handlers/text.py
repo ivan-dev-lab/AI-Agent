@@ -19,7 +19,7 @@ from config import (
 )
 from db import fetchone, fetchall, ensure_user_with_post
 from keyboards import back_kb, single_col_kb
-from utils import fmt_dt_local, fmt_tz_label, get_auth_state, pop_auth_state
+from utils import fmt_dt_local, get_auth_state, pop_auth_state
 from scheduler_jobs import schedule_task_jobs, send_task_assigned_notification, send_task_updated_notification
 from callbacks import (
     CB_STU_AFTER_ADD_SKIP,
@@ -466,7 +466,7 @@ async def on_text(msg: Message):
             return await msg.answer(
                 f"✅ Задание создано: <b>{data['title']}</b>\n"
                 f"Класс: <b>{class_row['name']}</b>\n"
-                f"Дедлайн: <b>{(due_local_str + ' ' + fmt_tz_label(tz)).strip()}</b>\n"
+                f"Дедлайн: <b>{due_local_str}</b>\n"
                 f"ID: <code>{task_id}</code>{extra}",
                 reply_markup=back_kb()
             )           

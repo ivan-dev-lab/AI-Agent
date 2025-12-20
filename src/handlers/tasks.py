@@ -12,7 +12,7 @@ from config import DB_PATH, DEFAULT_TZINFO
 from db import fetchall, fetchone
 from keyboards import back_kb, single_col_kb
 from callbacks import CB_ADD_TASK, CB_ADD_TASK_PICK_CLASS, CB_LIST_TASKS
-from utils import fmt_dt_local, fmt_tz_label
+from utils import fmt_dt_local
 from scheduler_jobs import schedule_task_jobs
 from utils import ensure_role
 
@@ -35,8 +35,7 @@ async def list_tasks(cq: CallbackQuery):
         if due_dt.tzinfo is None:
             due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
         due_local_str = fmt_dt_local(due_dt, tz)
-        tz_label = fmt_tz_label(tz)
-        lines.append(f"#{r['id']} • {r['class_name']} • <b>{r['title']}</b> — {due_local_str} {tz_label}".strip())
+        lines.append(f"#{r['id']} • {r['class_name']} • <b>{r['title']}</b> — {due_local_str}")
     text = "\n".join(lines)
     await cq.message.edit_text(text, reply_markup=back_kb())
 
@@ -61,12 +60,10 @@ async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
     if due_dt.tzinfo is None:
         due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
     due_local = fmt_dt_local(due_dt, tz)
-    tz_label = fmt_tz_label(tz)
-    label_part = f" ({tz_label})" if tz_label else ""
     text = (
         f"📝 <b>{t['title']}</b>\n"
         f"Класс: <b>{t['class_name']}</b>\n"
-        f"Дедлайн{label_part}: <b>{due_local}</b>\n\n"
+        f"Дедлайн: <b>{due_local}</b>\n\n"
         f"{t['description'] or '—'}"
     )
     # <- здесь было: task_detail_kb(callback_data.page)
