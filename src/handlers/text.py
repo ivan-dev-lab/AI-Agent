@@ -15,10 +15,11 @@ from config import (
     DEFAULT_TZ_DISPLAY,
     DATETIME_FORMAT,
     DATETIME_FORMAT_DISPLAY,
+    LOCAL_ADMIN_PASSWORD,
 )
-from db import fetchone, fetchall
+from db import fetchone, fetchall, ensure_user_with_post
 from keyboards import back_kb, single_col_kb
-from utils import fmt_dt_local
+from utils import fmt_dt_local, get_auth_state, pop_auth_state
 from scheduler_jobs import schedule_task_jobs, send_task_assigned_notification
 from callbacks import (
     CB_STU_AFTER_ADD_SKIP,
@@ -30,11 +31,38 @@ from callbacks import (
     CB_T_EDIT_PICK_CLS, CB_T_EDIT_PICK_STU, CB_T_EDIT_BACK_STUDENTS,
     CB_T_GEDIT_BACK_GROUPS, CB_T_GEDIT_BACK_ACTIONS
 )
+from handlers.common import show_main_menu
 
 # простой in-memory FSM, как и было в проекте
 USER_STATE = {}   # {user_id: {"mode": str, "step": int, "data": dict, "chat_id": int}}
 
 router = Router()
+
+async def _handle_la_password_input(msg: Message):
+    """
+    Handle password prompt for users not yet registered in the DB.
+    When the password is correct, create a local_admin without linking to any school.
+    """
+    password = msg.text.strip()
+
+    if not LOCAL_ADMIN_PASSWORD:
+        pop_auth_state(msg.from_user.id)
+        return await msg.answer("Пароль для доступа администратора не настроен. Сообщите об этом ответственному.")
+
+    if password != LOCAL_ADMIN_PASSWORD:
+        return await msg.answer("Пароль неверный. Попробуйте ещё раз или нажмите /start.")
+
+    await ensure_user_with_post(
+        msg.from_user.id,
+        post="local_admin",
+        name=msg.from_user.full_name,
+    )
+    pop_auth_state(msg.from_user.id)
+
+    await msg.answer(
+        "Пароль принят. Вас добавили в БД как local_admin без привязки к школе."
+    )
+    await show_main_menu(msg)
 
 def _gen_user_id() -> int:
     """
@@ -49,9 +77,11 @@ async def on_text(msg: Message):
     # DEBUG: маяк, чтобы понять, доходит ли вообще сюда управление
     print("on_text CALLED:", msg.from_user.id)
 
+    if get_auth_state(msg.from_user.id) == "await_la_password":
+        return await _handle_la_password_input(msg)
+
     state = USER_STATE.get(msg.from_user.id)
     if not state:
-        from handlers.common import show_main_menu
         return await show_main_menu(msg)
 
     mode = state["mode"]

@@ -19,9 +19,10 @@ from callbacks import (
     CB_LA_ASSIGN_TEACHER, CB_LA_ASSIGN_STUDENT,
     CB_LA_EDIT_TEACHERS, CB_LA_EDIT_STUDENTS,
     CB_LA_LIST_TEACHERS, CB_LA_LIST_STUDENTS, CB_LA_LIST_LOCAL_ADMINS,
-    CB_LA_BACK_TO_CORE, CB_LA_ASSIGN_PICK_CLS,
+    CB_LA_BACK_TO_CORE, CB_LA_ASSIGN_PICK_CLS, CB_LA_CREATE_SCHOOL,
 )
 from db import (
+    create_school,
     create_teacher_for_school,
     create_student_for_school,
     list_teachers_for_la,
@@ -35,6 +36,7 @@ from db import (
     list_schools,
     ensure_user_with_post,
     assign_teacher_to_school,
+    assign_local_admin,
 )
 
 
@@ -106,6 +108,18 @@ async def cb_la_core(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
     await cq.message.edit_text("🧱 <b>Основные функции</b>\nВыберите действие:", reply_markup=la_core_kb())
+
+@router.callback_query(F.data == CB_LA_CREATE_SCHOOL)
+async def la_create_school_start(cq: CallbackQuery):
+    """Запросить название новой школы и назначить себя админом."""
+    if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
+        return
+
+    LA_STATE[cq.from_user.id] = {"mode": "la_create_school"}
+    await cq.message.edit_text(
+        "Введите название школы. Мы создадим её и привяжем вас как local_admin.",
+        reply_markup=back_kb()
+    )
 
 
 @router.callback_query(F.data == CB_LA_ASSIGN_TEACHER)
@@ -595,6 +609,23 @@ async def handle_la_text_input(msg: Message):
         # 👉 Переименование ученика (без проверки isdigit)
         if mode == "la_rename_student":
             await _handle_la_rename_student_step(msg, st)
+            return
+
+        if mode == "la_create_school":
+            name = raw
+            if not name:
+                return await msg.answer("Введите название школы:", reply_markup=back_kb())
+            try:
+                school_id = await create_school(name=name, short_name=None, address=None)
+                await ensure_user_with_post(msg.from_user.id, post="local_admin", name=msg.from_user.full_name)
+                await assign_local_admin(school_id, msg.from_user.id)
+            except Exception as e:
+                return await msg.answer(f"Не удалось создать школу: {e}", reply_markup=la_core_kb())
+
+            await msg.answer(
+                f"✅ Школа «{name}» создана. Вы назначены local_admin для неё.",
+                reply_markup=la_core_kb()
+            )
             return
 
         # Для остальных режимов ожидаем Telegram ID (только цифры)

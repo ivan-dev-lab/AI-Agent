@@ -26,6 +26,7 @@ except Exception:
     DEFAULT_TZINFO = timezone(timedelta(hours=5))
 DEFAULT_MODEL = os.getenv("MODEL_NAME", "llama3:8b")
 GENAPI_TOKEN = os.getenv("GENAPI_TOKEN", "")
+LOCAL_ADMIN_PASSWORD = os.getenv("LOCAL_ADMIN_PASSWORD")
 
 # напоминания для заданий
 # Требование: за 7 дней до дедлайна, за 3 дня и за 24 часа.

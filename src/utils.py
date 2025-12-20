@@ -57,6 +57,20 @@ async def fetchall(db, sql: str, params=()):
 
 # ---------- Authorization ----------
 
+AUTH_STATE: dict[int, str] = {}
+
+
+def set_auth_state(user_id: int, state: str) -> None:
+    AUTH_STATE[user_id] = state
+
+
+def pop_auth_state(user_id: int) -> Optional[str]:
+    return AUTH_STATE.pop(user_id, None)
+
+
+def get_auth_state(user_id: int) -> Optional[str]:
+    return AUTH_STATE.get(user_id)
+
 
 async def is_known_user(user_id: int) -> bool:
     """Есть ли пользователь в users (UserID) — любая роль."""
@@ -69,9 +83,16 @@ async def ensure_authorized(user_id: int, target) -> bool:
     target - Message or CallbackQuery.
     """
     if await is_known_user(user_id):
+        pop_auth_state(user_id)
         return True
 
-    text = "🚫 Вы не авторизованы. Обратитесь к администратору."
+    awaiting = get_auth_state(user_id) == 'await_la_password'
+    set_auth_state(user_id, 'await_la_password')
+    text = (
+        "Вы ещё не зарегистрированы. Уже ждём пароль, отправьте его сообщением."
+        if awaiting
+        else "Вы не зарегистрированы. Введите пароль, чтобы продолжить."
+    )
     try:
         await target.answer(text)          # Message
     except AttributeError:

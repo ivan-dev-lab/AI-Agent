@@ -60,6 +60,9 @@ async def _show_main_for(user_id: int, target: Message | CallbackQuery):
     else:
         await target.message.edit_text(text, reply_markup=kb)
 
+async def show_main_menu(msg: Message):
+    await _show_main_for(msg.from_user.id, msg)
+
 def _cancel_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_activation")]

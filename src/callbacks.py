@@ -45,6 +45,7 @@ CB_LA_EDIT_STUDENTS = "la_edit_students"
 CB_LA_LIST_TEACHERS = "la_list_teachers"
 CB_LA_LIST_STUDENTS = "la_list_students"
 CB_LA_LIST_LOCAL_ADMINS = "la_list_local_admins"
+CB_LA_CREATE_SCHOOL = "la_create_school"
 CB_LA_BACK_TO_CORE = "la_back_to_core"
 
 CB_LA_ASSIGN_PICK_CLS = "la_assign_pick_cls:"   # +<class_id> при выборе класса
