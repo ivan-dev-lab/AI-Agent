@@ -175,13 +175,14 @@ async def la_assign_teacher_pick_school(cq: CallbackQuery):
 
     LA_STATE[cq.from_user.id] = {
         "mode": "assign_teacher",
+        "step": 0,
         "school_id": school_id,
         "school_name": school_name,
     }
 
     await cq.message.edit_text(
         f"👩‍🏫 Назначение учителя в <b>{school_name}</b>\n\n"
-        f"Отправьте <b>Telegram ID</b> пользователя (только цифры).",
+        f"Шаг 1/2: отправьте <b>Telegram ID</b> пользователя (только цифры).",
         reply_markup=back_kb()
     )
 
@@ -599,6 +600,7 @@ async def handle_la_text_input(msg: Message):
 
     mode = st.get("mode")
     raw = msg.text.strip()
+    keep_state = False
 
     try:
 
@@ -629,14 +631,10 @@ async def handle_la_text_input(msg: Message):
             return
 
 
-        if not raw.isdigit():
-            return await msg.answer("❌ Введите корректный Telegram ID (только цифры).")
-
-        user_id = int(raw)
-
         if mode == "assign_teacher":
             school_id = st.get("school_id")
             school_name = st.get("school_name", "выбранная школа")
+            step = st.get("step", 0)
 
             if school_id is None:
                 return await msg.answer(
@@ -644,18 +642,54 @@ async def handle_la_text_input(msg: Message):
                     reply_markup=la_core_kb()
                 )
 
+            if step == 0:
+                if not raw.isdigit():
+                    keep_state = True
+                    return await msg.answer(
+                        "❌ Введите корректный Telegram ID (только цифры).",
+                        reply_markup=back_kb()
+                    )
 
-            await ensure_user_with_post(user_id, post="teacher")
+                st["teacher_id"] = int(raw)
+                st["step"] = 1
+                LA_STATE[msg.from_user.id] = st
+                keep_state = True
+                return await msg.answer(
+                    "Шаг 2/2: Введите имя учителя:",
+                    reply_markup=back_kb()
+                )
 
-            await assign_teacher_to_school(school_id, user_id)
+            if step == 1:
+                teacher_name = raw
+                if not teacher_name:
+                    keep_state = True
+                    return await msg.answer(
+                        "Введите имя учителя:",
+                        reply_markup=back_kb()
+                    )
 
-            await msg.answer(
-                f"✅ Учитель <code>{user_id}</code> назначен в школу <b>{school_name}</b>.",
-                reply_markup=la_core_kb()
-            )
+                teacher_id = st.get("teacher_id")
+                if teacher_id is None:
+                    return await msg.answer(
+                        "❌ Не удалось определить Telegram ID учителя. Попробуйте назначение заново.",
+                        reply_markup=la_core_kb()
+                    )
 
+                await ensure_user_with_post(teacher_id, post="teacher", name=teacher_name)
+                await assign_teacher_to_school(school_id, teacher_id)
 
-        elif mode == "assign_student":
+                await msg.answer(
+                    f"✅ Учитель <b>{teacher_name}</b> (ID <code>{teacher_id}</code>) назначен в школу <b>{school_name}</b>.",
+                    reply_markup=la_core_kb()
+                )
+                return
+
+        if not raw.isdigit():
+            return await msg.answer("❌ Введите корректный Telegram ID (только цифры).")
+
+        user_id = int(raw)
+
+        if mode == "assign_student":
             ok = await create_student_for_school(user_id, msg.from_user.id)
             if ok:
                 await msg.answer(f"✅ Ученик <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
@@ -673,4 +707,5 @@ async def handle_la_text_input(msg: Message):
         await msg.answer(f"❌ Ошибка: {e}")
     finally:
 
-        LA_STATE.pop(msg.from_user.id, None)
+        if not keep_state:
+            LA_STATE.pop(msg.from_user.id, None)
