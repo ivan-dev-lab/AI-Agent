@@ -92,7 +92,7 @@ async def _get_target_student_ids(db: aiosqlite.Connection, task_id: int, class_
 
 
 async def send_task_assigned_notification(task_id: int, student_ids: list[int] | None = None) -> None:
-    """Уведомление ученикам о том, что учитель назначил задание."""
+    """Уведомление студентам о том, что преподаватель назначил задание."""
     if BOT is None:
         return
 
@@ -120,7 +120,7 @@ async def send_task_assigned_notification(task_id: int, student_ids: list[int] |
         if targets is None:
             targets = await _get_target_student_ids(db, task_id, class_row["id"])
 
-    teacher_part = f"Учитель: <b>{teacher_name}</b>\n" if teacher_name else ""
+    teacher_part = f"Преподаватель: <b>{teacher_name}</b>\n" if teacher_name else ""
     deadline_str = due_local_str
     text = (
         "📌 <b>Назначено новое задание</b>\n"
@@ -142,7 +142,7 @@ async def send_task_assigned_notification(task_id: int, student_ids: list[int] |
 
 
 async def send_task_updated_notification(task_id: int, student_ids: list[int] | None = None) -> None:
-    """Уведомление ученикам: задание обновлено (название/описание/дедлайн)."""
+    """Уведомление студентам: задание обновлено (название/описание/дедлайн)."""
     if BOT is None:
         return
 
@@ -256,7 +256,7 @@ async def rehydrate_jobs() -> None:
 
 
 async def send_deadline_reminder_job(task_id: int, kind: str) -> None:
-    """Отправляет напоминание ученикам о приближении дедлайна."""
+    """Отправляет напоминание студентам о приближении дедлайна."""
     if BOT is None:
         return
 

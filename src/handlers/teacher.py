@@ -51,7 +51,7 @@ def _format_due_simple(due_raw: str | None) -> str:
         return due_raw
 
 async def _vt_show_classes(cq: CallbackQuery):
-    """Список групп учителя для просмотра заданий."""
+    """Список групп преподаватели для просмотра заданий."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         classes = await fetchall(
@@ -73,16 +73,16 @@ async def _vt_show_classes(cq: CallbackQuery):
 
 
 async def _vt_show_class_menu(cq: CallbackQuery, class_id: int):
-    """Меню по группе: выбор между групповыми заданиями и заданиями по ученикам."""
+    """Меню по группе: выбор между групповыми заданиями и заданиями по студентам."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
     if not cls:
-        return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+        return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
     rows = [
         ("📋 Задания для всей группы", f"{CB_T_VTASK_GROUP_TASKS}{class_id}"),
-        ("👥 Задания для учеников",    f"{CB_T_VTASK_STUDENTS}{class_id}"),
+        ("👥 Задания для студентов",    f"{CB_T_VTASK_STUDENTS}{class_id}"),
         ("⬅ Назад к группам",         CB_T_VTASK_BACK_CLASSES),
     ]
     await cq.message.edit_text(
@@ -90,12 +90,12 @@ async def _vt_show_class_menu(cq: CallbackQuery, class_id: int):
         reply_markup=single_col_kb(rows)
     )
 async def _vt_show_students(cq: CallbackQuery, class_id: int):
-    """Список учеников выбранной группы для просмотра их заданий."""
+    """Список студентов выбранной группы для просмотра их заданий."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
-            return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+            return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
         students = await fetchall(
             db,
@@ -112,7 +112,7 @@ async def _vt_show_students(cq: CallbackQuery, class_id: int):
     rows.append(("⬅ Назад к меню группы", f"{CB_T_VTASK_CLASS_MENU}{class_id}"))
 
     text = f"Группа: <b>{cls['name']}</b>\n"
-    text += "Выберите ученика:" if students else "В этой группе пока нет учеников."
+    text += "Выберите студента:" if students else "В этой группе пока нет студентов."
     await cq.message.edit_text(text, reply_markup=single_col_kb(rows))
 
 
@@ -124,7 +124,7 @@ async def _vt_show_group_tasks(cq: CallbackQuery, class_id: int, desc_limit: int
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
-            return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+            return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
         tasks = await fetchall(
             db,
             """
@@ -161,12 +161,12 @@ async def _vt_show_group_tasks(cq: CallbackQuery, class_id: int, desc_limit: int
     await cq.message.edit_text("\n".join(text_lines), reply_markup=single_col_kb(rows))
 
 async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: int, desc_limit: int = 50):
-    """Список задач ученика: только индивидуальные (target на ученика)."""
+    """Список задач студента: только индивидуальные (target на студента)."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
-            return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+            return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
         stu = await fetchone(db, "SELECT COALESCE(name,'(без имени)') AS name FROM users WHERE UserID=?", (student_id,))
         stu_name = stu["name"] if stu else f"ID {student_id}"
@@ -202,10 +202,10 @@ async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: i
         lines_out.append(f"{idx}. {marker} {t['title']}{suffix}" + (f" — {desc}" if desc else ""))
         rows.append((t["title"], f"{CB_T_VTASK_OPEN}{t['id']}:{student_id}:{class_id}"))
 
-    rows.append(("⬅ Назад к ученикам", f"{CB_T_VTASK_BACK_STUDENTS}{class_id}"))
+    rows.append(("⬅ Назад к студентам", f"{CB_T_VTASK_BACK_STUDENTS}{class_id}"))
     text_lines = [
         f"Группа: <b>{cls['name']}</b>",
-        f"Ученик: <b>{stu_name}</b>",
+        f"Студент: <b>{stu_name}</b>",
     ]
     if not tasks:
         text_lines.append("Заданий не найдено.")
@@ -215,7 +215,7 @@ async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: i
 
     await cq.message.edit_text("\n".join(text_lines), reply_markup=single_col_kb(rows))
 async def _task_show_classes(cq: CallbackQuery):
-    """Список групп учителя для добавления задания."""
+    """Список групп преподаватели для добавления задания."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         classes = await fetchall(
@@ -234,17 +234,17 @@ async def _task_show_classes(cq: CallbackQuery):
 
 
 async def _task_show_scope(cq: CallbackQuery, class_id: int):
-    """Выбор охвата задания: всей группе или выбранным ученикам."""
+    """Выбор охвата задания: всей группе или выбранным студентам."""
     rows = [
         ("👥 Выдать всей группе",       f"{CB_T_TASK_SCOPE}cls:{class_id}"),
-        ("👤 Выбрать учеников",         f"{CB_T_TASK_SCOPE}sel:{class_id}"),
+        ("👤 Выбрать студентов",         f"{CB_T_TASK_SCOPE}sel:{class_id}"),
         ("⬅ Назад к списку групп",      CB_T_TASK_BACK_CLASSES),
     ]
     await cq.message.edit_text("Кому выдать задание?", reply_markup=single_col_kb(rows))
 
 
 async def _task_show_students_select(cq: CallbackQuery, class_id: int, selected: set[int] | None = None):
-    """Экран мультивыбора учеников класса (переключатели)."""
+    """Экран мультивыбора студентов класса (переключатели)."""
     selected = selected or set()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -268,13 +268,13 @@ async def _task_show_students_select(cq: CallbackQuery, class_id: int, selected:
     rows.append(("⬅ Назад", f"{CB_T_TASK_BACK_SCOPE}{class_id}"))
 
     await cq.message.edit_text(
-        "Выберите учеников (нажимайте для переключения):",
+        "Выберите студентов (нажимайте для переключения):",
         reply_markup=single_col_kb(rows)
     )
 
 
 async def _show_group_list_for_edit(cq: CallbackQuery):
-    """Список групп учителя для режима 'Редактировать группу'."""
+    """Список групп преподаватели для режима 'Редактировать группу'."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         classes = await fetchall(
@@ -308,14 +308,14 @@ async def _show_group_actions(cq: CallbackQuery, class_id: int):
 
 
     if not cls:
-        await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+        await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
         return
 
 
     rows = [
         ("🗑 Удалить группу",        f"{CB_T_GEDIT_ACTION}delgroup:{class_id}"),
-        ("👤 Удалить ученика",       f"{CB_T_GEDIT_ACTION}delstudent:{class_id}"),
-        ("➕ Добавить ученика",      f"{CB_T_GEDIT_ACTION}addstudent:{class_id}"),
+        ("👤 Удалить студента",       f"{CB_T_GEDIT_ACTION}delstudent:{class_id}"),
+        ("➕ Добавить студента",      f"{CB_T_GEDIT_ACTION}addstudent:{class_id}"),
         ("✏️ Изменить название",     f"{CB_T_GEDIT_ACTION}rename:{class_id}"),
         ("⬅ Назад к списку групп",  CB_T_GEDIT_BACK_GROUPS),
     ]
@@ -327,12 +327,12 @@ async def _show_group_actions(cq: CallbackQuery, class_id: int):
 
 
 async def _show_students_of_group_for_delete(cq: CallbackQuery, class_id: int):
-    """Список учеников выбранной группы для удаления конкретного ученика."""
+    """Список студентов выбранной группы для удаления конкретного студента."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
-            return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+            return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
         students = await fetchall(
             db,
@@ -349,12 +349,12 @@ async def _show_students_of_group_for_delete(cq: CallbackQuery, class_id: int):
     rows.append(("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}"))
 
     text = f"Группа: <b>{cls['name']}</b>\n"
-    text += "Выберите ученика для удаления:" if students else "В этой группе пока нет учеников."
+    text += "Выберите студента для удаления:" if students else "В этой группе пока нет студентов."
     await cq.message.edit_text(text, reply_markup=single_col_kb(rows))
 
 
 async def _show_edit_classes(cq: CallbackQuery):
-    """Показать список классов учителя."""
+    """Показать список классов преподаватели."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         classes = await fetchall(
@@ -370,13 +370,13 @@ async def _show_edit_classes(cq: CallbackQuery):
     rows = [(c["name"], f"{CB_T_EDIT_PICK_CLS}{c['id']}") for c in classes]
     rows.append(("⬅ Назад", CB_BACK))
     await cq.message.edit_text(
-        "Выберите группу для редактирования учеников:",
+        "Выберите группу для редактирования студентов:",
         reply_markup=single_col_kb(rows)
     )
 
 
 async def _show_students_of_class(cq: CallbackQuery, class_id: int):
-    """Показать список учеников указанного класса."""
+    """Показать список студентов указанного класса."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         students = await fetchall(
@@ -398,9 +398,9 @@ async def _show_students_of_class(cq: CallbackQuery, class_id: int):
 
     text = f"Группа: <b>{class_name}</b>\n"
     if not students:
-        text += "\nВ этой группе пока нет учеников."
+        text += "\nВ этой группе пока нет студентов."
     else:
-        text += "\nВыберите ученика для редактирования:"
+        text += "\nВыберите студента для редактирования:"
 
     await cq.message.edit_text(
         text,
@@ -409,7 +409,7 @@ async def _show_students_of_class(cq: CallbackQuery, class_id: int):
 
 
 async def _show_student_actions(cq: CallbackQuery, student_id: int, class_id: int):
-    """Показать меню действий над выбранным учеником."""
+    """Показать меню действий над выбранным студентом."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         stu = await fetchone(db, "SELECT UserID AS id, COALESCE(name,'(без имени)') AS name FROM users WHERE UserID=?", (student_id,))
@@ -420,10 +420,10 @@ async def _show_student_actions(cq: CallbackQuery, student_id: int, class_id: in
     rows = [
         ("✏️ Редактировать ФИО",   f"{CB_T_EDIT_ACTION}fio:{student_id}:{class_id}"),
         ("📁 Редактировать группу", f"{CB_T_EDIT_ACTION}group:{student_id}:{class_id}"),
-        ("⬅ Назад к ученикам",     f"{CB_T_EDIT_BACK_STUDENTS}{class_id}"),
+        ("⬅ Назад к студентам",     f"{CB_T_EDIT_BACK_STUDENTS}{class_id}"),
     ]
     await cq.message.edit_text(
-        f"Ученик: <b>{stu_name}</b>\nГруппа: <b>{cls_name}</b>\n\nВыберите действие:",
+        f"Студент: <b>{stu_name}</b>\nГруппа: <b>{cls_name}</b>\n\nВыберите действие:",
         reply_markup=single_col_kb(rows)
     )
 
@@ -443,7 +443,7 @@ async def cb_t_assign_student(cq: CallbackQuery):
         return await cq.answer("Недостаточно прав", show_alert=True)
     USER_STATE[cq.from_user.id] = {"mode": "t_assign_student", "step": 0, "data": {}}
     await cq.message.edit_text(
-        "👨‍🎓 <b>Добавить ученика</b>\n\nШаг 1/2: отправьте ФИО ученика одним сообщением.",
+        "👨‍🎓 <b>Добавить студента</b>\n\nШаг 1/2: отправьте ФИО студента одним сообщением.",
         reply_markup=back_kb()
     )
 
@@ -554,7 +554,7 @@ async def cb_t_edit_action(cq: CallbackQuery):
         }
         rows = [("⬅ Назад", f"{CB_T_EDIT_BACK_ACTIONS}{student_id}:{class_id}")]
         return await cq.message.edit_text(
-            "✏️ Введите <b>новое ФИО</b> для ученика одним сообщением:",
+            "✏️ Введите <b>новое ФИО</b> для студента одним сообщением:",
             reply_markup=single_col_kb(rows)
         )
 
@@ -583,7 +583,7 @@ async def cb_t_edit_action(cq: CallbackQuery):
         rows.append(("⬅ Назад", f"{CB_T_EDIT_BACK_ACTIONS}{student_id}:{class_id}"))
 
         return await cq.message.edit_text(
-            f"Перенос ученика из группы <b>{cur_name}</b>.\nВыберите новую группу:",
+            f"Перенос студента из группы <b>{cur_name}</b>.\nВыберите новую группу:",
             reply_markup=single_col_kb(rows)
         )
 
@@ -637,16 +637,16 @@ async def cb_t_edit_pick_newcls(cq: CallbackQuery):
         old_name = old_cls["name"] if old_cls else f"ID {old_class_id}"
 
         rows = [
-            ("⬅ К ученикам новой группы", f"{CB_T_EDIT_BACK_STUDENTS}{new_class_id}"),
+            ("⬅ К студентам новой группы", f"{CB_T_EDIT_BACK_STUDENTS}{new_class_id}"),
             ("◀️ Назад к действиям",      f"{CB_T_EDIT_BACK_ACTIONS}{student_id}:{new_class_id}"),
         ]
         await cq.message.edit_text(
-            f"✅ Ученик <b>{stu_name}</b> перенесён:\n<b>{old_name}</b> → <b>{new_name}</b>",
+            f"✅ Студент <b>{stu_name}</b> перенесён:\n<b>{old_name}</b> → <b>{new_name}</b>",
             reply_markup=single_col_kb(rows)
         )
     except Exception as e:
         await cq.message.edit_text(f"❌ Ошибка переноса: {e}", reply_markup=single_col_kb([
-            ("⬅ Назад к ученикам", f"{CB_T_EDIT_BACK_STUDENTS}{old_class_id}")
+            ("⬅ Назад к студентам", f"{CB_T_EDIT_BACK_STUDENTS}{old_class_id}")
         ]))
 
 
@@ -710,7 +710,7 @@ async def cb_t_gedit_action(cq: CallbackQuery):
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
     if not cls:
-        return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+        return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
     if action == "delgroup":
 
@@ -732,7 +732,7 @@ async def cb_t_gedit_action(cq: CallbackQuery):
 
         return await cq.message.edit_text(
             f"✅ Группа <b>{cls['name']}</b> удалена.\n"
-            f"Ученики больше не состоят ни в какой группе (\"группа отсутствует\").",
+            f"Студенты больше не состоят ни в какой группе (\"группа отсутствует\").",
             reply_markup=single_col_kb([("⬅ Назад к списку групп", CB_T_GEDIT_BACK_GROUPS)])
         )
 
@@ -772,7 +772,7 @@ async def cb_t_gedit_action(cq: CallbackQuery):
         if not students:
             rows = [("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")]
             return await cq.message.edit_text(
-                "Нет доступных учеников для добавления в эту группу.",
+                "Нет доступных студентов для добавления в эту группу.",
                 reply_markup=single_col_kb(rows)
             )
 
@@ -783,7 +783,7 @@ async def cb_t_gedit_action(cq: CallbackQuery):
         rows.append(("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}"))
 
         return await cq.message.edit_text(
-            "Выберите ученика для добавления в эту группу:",
+            "Выберите студента для добавления в эту группу:",
             reply_markup=single_col_kb(rows)
         )
 
@@ -808,7 +808,7 @@ async def cb_t_gdel_pick_student(cq: CallbackQuery):
 
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
-            return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+            return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
         stu = await fetchone(db, "SELECT COALESCE(name,'(без имени)') AS name FROM users WHERE UserID=?", (student_id,))
         stu_name = stu["name"] if stu else f"ID {student_id}"
@@ -818,16 +818,16 @@ async def cb_t_gdel_pick_student(cq: CallbackQuery):
             await db.commit()
         except Exception as e:
             return await cq.message.edit_text(
-                f"❌ Ошибка удаления ученика: {e}",
+                f"❌ Ошибка удаления студента: {e}",
                 reply_markup=single_col_kb([("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")])
             )
 
     rows = [
-        ("⬅ Назад к ученикам группы", f"{CB_T_GEDIT_BACK_STUDENTS}{class_id}"),
+        ("⬅ Назад к студентам группы", f"{CB_T_GEDIT_BACK_STUDENTS}{class_id}"),
         ("◀️ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}"),
     ]
     await cq.message.edit_text(
-        f"✅ Ученик <b>{stu_name}</b> удалён из группы <b>{cls['name']}</b>.\n"
+        f"✅ Студент <b>{stu_name}</b> удалён из группы <b>{cls['name']}</b>.\n"
         f"Теперь у него \"группа отсутствует\".",
         reply_markup=single_col_kb(rows)
     )
@@ -852,7 +852,7 @@ async def cb_t_gadd_pick_student(cq: CallbackQuery):
 
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
-            return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+            return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
         stu = await fetchone(db, "SELECT COALESCE(name,'(без имени)') AS name FROM users WHERE UserID=?", (student_id,))
         stu_name = stu["name"] if stu else f"ID {student_id}"
@@ -867,7 +867,7 @@ async def cb_t_gadd_pick_student(cq: CallbackQuery):
         except Exception as e:
             rows = [("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")]
             return await cq.message.edit_text(
-                f"❌ Ошибка добавления ученика: {e}",
+                f"❌ Ошибка добавления студента: {e}",
                 reply_markup=single_col_kb(rows)
             )
 
@@ -876,7 +876,7 @@ async def cb_t_gadd_pick_student(cq: CallbackQuery):
         ("⬅ Назад к списку групп",     CB_T_GEDIT_BACK_GROUPS),
     ]
     await cq.message.edit_text(
-        f"✅ Ученик <b>{stu_name}</b> добавлен в группу <b>{cls['name']}</b>.",
+        f"✅ Студент <b>{stu_name}</b> добавлен в группу <b>{cls['name']}</b>.",
         reply_markup=single_col_kb(rows)
     )
 
@@ -968,7 +968,7 @@ async def cb_t_task_pick_stu(cq: CallbackQuery):
 
     st = USER_STATE.get(cq.from_user.id)
     if not st or st.get("mode") != "t_add_task_select" or st.get("class_id") != class_id:
-        return await cq.answer("Нет активного выбора учеников", show_alert=True)
+        return await cq.answer("Нет активного выбора студентов", show_alert=True)
 
     selected: set[int] = st.setdefault("selected", set())
     if student_id in selected:
@@ -990,11 +990,11 @@ async def cb_t_task_pick_done(cq: CallbackQuery):
 
     st = USER_STATE.get(cq.from_user.id)
     if not st or st.get("mode") != "t_add_task_select" or st.get("class_id") != class_id:
-        return await cq.answer("Нет активного выбора учеников", show_alert=True)
+        return await cq.answer("Нет активного выбора студентов", show_alert=True)
 
     selected = list(st.get("selected") or [])
     if not selected:
-        return await cq.answer("Выберите хотя бы одного ученика", show_alert=True)
+        return await cq.answer("Выберите хотя бы одного студента", show_alert=True)
 
 
     USER_STATE[cq.from_user.id] = {
@@ -1111,7 +1111,7 @@ async def cb_t_vtask_open(cq: CallbackQuery):
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
-            return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
+            return await cq.answer("Группа не найдена или принадлежит другому преподавателю.", show_alert=True)
 
         t = await fetchone(
             db,
@@ -1151,13 +1151,13 @@ async def cb_t_vtask_open(cq: CallbackQuery):
         ])
     else:
         rows.extend([
-            ("⬅ Назад к заданиям ученика", f"{CB_T_VTASK_BACK_TASKS}{student_id}:{class_id}"),
-            ("⬅ Назад к ученикам",        f"{CB_T_VTASK_BACK_STUDENTS}{class_id}"),
+            ("⬅ Назад к заданиям студента", f"{CB_T_VTASK_BACK_TASKS}{student_id}:{class_id}"),
+            ("⬅ Назад к студентам",        f"{CB_T_VTASK_BACK_STUDENTS}{class_id}"),
             ("⬅ Назад к группам",         CB_T_VTASK_BACK_CLASSES),
         ])
     await cq.message.edit_text(
         f"Группа: <b>{cls['name']}</b>\n"
-        f"Ученик: <b>{stu_name}</b>\n"
+        f"Студент: <b>{stu_name}</b>\n"
         f"{scope_note}\n\n"
         f"📝 <b>{t['title']}</b>\n"
         f"⏰ Дедлайн: <b>{due_str}</b>\n\n"
@@ -1356,11 +1356,11 @@ async def cb_t_assign_pick_class(cq: CallbackQuery):
 
     state = USER_STATE.get(cq.from_user.id)
     if not state or state.get("mode") != "t_assign_student":
-        return await cq.answer("Нет активного мастера добавления ученика", show_alert=True)
+        return await cq.answer("Нет активного мастера добавления студента", show_alert=True)
 
     display_name = state.get("data", {}).get("display_name")
     if not display_name:
-        return await cq.answer("Не получено имя ученика", show_alert=True)
+        return await cq.answer("Не получено имя студента", show_alert=True)
 
 
     try:
@@ -1387,11 +1387,11 @@ async def cb_t_assign_pick_class(cq: CallbackQuery):
 
     USER_STATE.pop(cq.from_user.id, None)
     await cq.message.edit_text(
-        f"✅ Приглашение для ученика создано!\n\n"
+        f"✅ Приглашение для студента создано!\n\n"
         f"👤 <b>ФИО:</b> {display_name}\n"
         f"📁 <b>Группа:</b> {class_name}\n"
         f"🔗 <b>Ссылка:</b> {invite_link}\n\n"
-        f"ℹ️ Передайте ссылку ученику. Перейдя по ней, он будет добавлен в систему с ролью "
+        f"ℹ️ Передайте ссылку студенту. Перейдя по ней, он будет добавлен в систему с ролью "
         f"<b>student</b> и записан в выбранную группу.",
         reply_markup=teacher_main_kb(),
         disable_web_page_preview=True

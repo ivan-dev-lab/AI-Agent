@@ -117,14 +117,14 @@ async def la_create_school_start(cq: CallbackQuery):
 
     LA_STATE[cq.from_user.id] = {"mode": "la_create_school"}
     await cq.message.edit_text(
-        "Введите название школы. Мы создадим её и привяжем вас как local_admin.",
+        "Введите название университета. Мы создадим его и привяжем вас как local_admin.",
         reply_markup=back_kb()
     )
 
 
 @router.callback_query(F.data == CB_LA_ASSIGN_TEACHER)
 async def la_assign_teacher_start(cq: CallbackQuery):
-    """Назначить учителя для школ локального администратора."""
+    """Назначить преподаватели для школ локального администратора."""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -132,7 +132,7 @@ async def la_assign_teacher_start(cq: CallbackQuery):
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if not school_ids:
         return await cq.message.edit_text(
-            "❌ Вы не привязаны ни к одной школе. Обратитесь к администратору школы.",
+            "❌ Вы не привязаны ни к одному университету. Обратитесь к администратору университета.",
             reply_markup=la_core_kb()
         )
 
@@ -141,7 +141,7 @@ async def la_assign_teacher_start(cq: CallbackQuery):
     schools = [s for s in all_schools if s["id"] in school_ids]
     if not schools:
         return await cq.message.edit_text(
-            "❌ Не найдено ни одной доступной вам школы.",
+            "❌ Не найдено ни одного доступного вам университета.",
             reply_markup=la_core_kb()
         )
 
@@ -154,7 +154,7 @@ async def la_assign_teacher_start(cq: CallbackQuery):
     )
 @router.callback_query(F.data.startswith("la_assign_teacher_pick:"))
 async def la_assign_teacher_pick_school(cq: CallbackQuery):
-    """После выбора школы ЛА — запрос Telegram ID учителя"""
+    """После выбора школы ЛА — запрос Telegram ID преподаватели"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -166,7 +166,7 @@ async def la_assign_teacher_pick_school(cq: CallbackQuery):
 
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if school_id not in school_ids:
-        return await cq.answer("Эта школа вам недоступна.", show_alert=True)
+        return await cq.answer("Этот университет вам недоступен.", show_alert=True)
 
 
     all_schools = await list_schools()
@@ -181,7 +181,7 @@ async def la_assign_teacher_pick_school(cq: CallbackQuery):
     }
 
     await cq.message.edit_text(
-        f"👩‍🏫 Назначение учителя в <b>{school_name}</b>\n\n"
+        f"👩‍🏫 Назначение преподавателя в <b>{school_name}</b>\n\n"
         f"Шаг 1/2: отправьте <b>Telegram ID</b> пользователя (только цифры).",
         reply_markup=back_kb()
     )
@@ -191,8 +191,8 @@ async def la_assign_teacher_pick_school(cq: CallbackQuery):
 @router.callback_query(F.data == CB_LA_ASSIGN_STUDENT)
 async def la_assign_student_start(cq: CallbackQuery):
     """
-    Старт мастера добавления ученика от лица локального администратора.
-    Логика как в учителе: ФИО -> выбор класса -> приглашение.
+    Старт мастера добавления студента от лица локального администратора.
+    Логика как в преподавателе: ФИО -> выбор класса -> приглашение.
     """
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
@@ -204,15 +204,15 @@ async def la_assign_student_start(cq: CallbackQuery):
     }
 
     await cq.message.edit_text(
-        "👨‍🎓 <b>Добавить ученика</b>\n\n"
-        "Шаг 1/2: отправьте ФИО ученика одним сообщением.",
+        "👨‍🎓 <b>Добавить студента</b>\n\n"
+        "Шаг 1/2: отправьте ФИО студента одним сообщением.",
         reply_markup=back_kb()
     )
 
 @router.callback_query(F.data.startswith(CB_LA_ASSIGN_PICK_CLS))
 async def la_assign_pick_class(cq: CallbackQuery):
     """
-    Шаг 2/2: выбор класса и генерация приглашения для ученика.
+    Шаг 2/2: выбор класса и генерация приглашения для студента.
     """
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
@@ -225,12 +225,12 @@ async def la_assign_pick_class(cq: CallbackQuery):
 
     state = USER_STATE.get(cq.from_user.id)
     if not state or state.get("mode") != "la_assign_student":
-        return await cq.answer("Нет активного мастера добавления ученика", show_alert=True)
+        return await cq.answer("Нет активного мастера добавления студента", show_alert=True)
 
     data = state.get("data", {})
     display_name = data.get("display_name")
     if not display_name:
-        return await cq.answer("Не получено имя ученика", show_alert=True)
+        return await cq.answer("Не получено имя студента", show_alert=True)
 
 
     try:
@@ -262,11 +262,11 @@ async def la_assign_pick_class(cq: CallbackQuery):
 
     USER_STATE.pop(cq.from_user.id, None)
     await cq.message.edit_text(
-        f"✅ Приглашение для ученика создано!\n\n"
+        f"✅ Приглашение для студента создано!\n\n"
         f"👤 <b>ФИО:</b> {display_name}\n"
         f"📁 <b>Класс:</b> {class_name}\n"
         f"🔗 <b>Ссылка:</b> {invite_link}\n\n"
-        f"ℹ️ Передайте ссылку ученику. Перейдя по ней, он будет добавлен в систему "
+        f"ℹ️ Передайте ссылку студенту. Перейдя по ней, он будет добавлен в систему "
         f"с ролью <b>student</b> и записан в выбранный класс.",
         reply_markup=la_core_kb(),
         disable_web_page_preview=True
@@ -276,14 +276,14 @@ async def la_assign_pick_class(cq: CallbackQuery):
 
 @router.callback_query(F.data == CB_LA_EDIT_TEACHERS)
 async def la_edit_teachers(cq: CallbackQuery):
-    """Редактирование учителей для локального админа"""
+    """Редактирование преподавателей для локального админа"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
     teachers = await list_teachers_for_la(cq.from_user.id)
     if not teachers:
         return await cq.message.edit_text(
-            "❌ В школах, где вы являетесь локальным администратором, пока нет учителей.",
+            "❌ В университетах, где вы являетесь локальным администратором, пока нет преподавателей.",
             reply_markup=la_core_kb()
         )
 
@@ -295,14 +295,14 @@ async def la_edit_teachers(cq: CallbackQuery):
     rows.append(("⬅ Назад", CB_LA_SEC_CORE))
 
     await cq.message.edit_text(
-        "Выберите учителя:",
+        "Выберите преподавателя:",
         reply_markup=single_col_kb(rows)
     )
 
 
 @router.callback_query(F.data.startswith("la_edit_teacher_actions:"))
 async def la_edit_teacher_actions(cq: CallbackQuery):
-    """Меню действий по выбранному учителю (ЛА)"""
+    """Меню действий по выбранному преподавателю (ЛА)"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -318,7 +318,7 @@ async def la_edit_teacher_actions(cq: CallbackQuery):
             callback_data=f"la_rename_teacher:{teacher_id}"
         )],
         [InlineKeyboardButton(
-            text="🗑 Удалить из школ, где я ЛА",
+            text="🗑 Удалить из университетов, где я ЛА",
             callback_data=f"la_remove_teacher:{teacher_id}"
         )],
         [InlineKeyboardButton(
@@ -328,13 +328,13 @@ async def la_edit_teacher_actions(cq: CallbackQuery):
     ])
 
     await cq.message.edit_text(
-        f"Учитель ID <code>{teacher_id}</code>. Выберите действие:",
+        f"Преподаватель ID <code>{teacher_id}</code>. Выберите действие:",
         reply_markup=kb
     )
 
 @router.callback_query(F.data.startswith("la_rename_teacher:"))
 async def la_rename_teacher(cq: CallbackQuery):
-    """Запрос нового имени учителя от ЛА"""
+    """Запрос нового имени преподаватели от ЛА"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -350,13 +350,13 @@ async def la_rename_teacher(cq: CallbackQuery):
     }
 
     await cq.message.edit_text(
-        "✏️ Введите новое имя учителя:",
+        "✏️ Введите новое имя преподавателя:",
         reply_markup=back_kb()
     )
 
 @router.callback_query(F.data.startswith("la_remove_teacher:"))
 async def la_remove_teacher(cq: CallbackQuery):
-    """Удалить учителя из всех школ, где текущий пользователь является ЛА."""
+    """Удалить преподаватели из всех школ, где текущий пользователь является ЛА."""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -369,27 +369,27 @@ async def la_remove_teacher(cq: CallbackQuery):
 
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if not school_ids:
-        return await cq.answer("Вы не привязаны ни к одной школе.", show_alert=True)
+        return await cq.answer("Вы не привязаны ни к одной университете.", show_alert=True)
 
 
     for sid in school_ids:
         await remove_teacher_from_school(sid, teacher_id)
 
-    await cq.answer("Учитель удалён из ваших школ.")
+    await cq.answer("Преподаватель удалён из ваших университетов.")
 
     await la_edit_teachers(cq)
 
 
 @router.callback_query(F.data == CB_LA_EDIT_STUDENTS)
 async def la_edit_students(cq: CallbackQuery):
-    """Редактирование учеников для локального админа"""
+    """Редактирование студентов для локального админа"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
     students = await list_students_for_la(cq.from_user.id)
     if not students:
         return await cq.message.edit_text(
-            "❌ В школах, где вы являетесь локальным администратором, пока нет учеников.",
+            "❌ В университетах, где вы являетесь локальным администратором, пока нет студентов.",
             reply_markup=la_core_kb()
         )
 
@@ -401,12 +401,12 @@ async def la_edit_students(cq: CallbackQuery):
     rows.append(("⬅ Назад", CB_LA_SEC_CORE))
 
     await cq.message.edit_text(
-        "Выберите ученика:",
+        "Выберите студента:",
         reply_markup=single_col_kb(rows)
     )
 @router.callback_query(F.data.startswith("la_edit_student_actions:"))
 async def la_edit_student_actions(cq: CallbackQuery):
-    """Меню действий по выбранному ученику (ЛА)"""
+    """Меню действий по выбранному студенту (ЛА)"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -422,7 +422,7 @@ async def la_edit_student_actions(cq: CallbackQuery):
             callback_data=f"la_rename_student:{student_id}"
         )],
         [InlineKeyboardButton(
-            text="🗑 Удалить из школ, где я ЛА",
+            text="🗑 Удалить из университетов, где я ЛА",
             callback_data=f"la_remove_student:{student_id}"
         )],
         [InlineKeyboardButton(
@@ -432,12 +432,12 @@ async def la_edit_student_actions(cq: CallbackQuery):
     ])
 
     await cq.message.edit_text(
-        f"Ученик ID <code>{student_id}</code>. Выберите действие:",
+        f"Студент ID <code>{student_id}</code>. Выберите действие:",
         reply_markup=kb
     )
 @router.callback_query(F.data.startswith("la_rename_student:"))
 async def la_rename_student(cq: CallbackQuery):
-    """Запрос нового имени ученика от ЛА"""
+    """Запрос нового имени студента от ЛА"""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -453,12 +453,12 @@ async def la_rename_student(cq: CallbackQuery):
     }
 
     await cq.message.edit_text(
-        "✏️ Введите новое имя ученика:",
+        "✏️ Введите новое имя студента:",
         reply_markup=back_kb()
     )
 @router.callback_query(F.data.startswith("la_remove_student:"))
 async def la_remove_student(cq: CallbackQuery):
-    """Удалить ученика из всех школ, где текущий пользователь является ЛА."""
+    """Удалить студента из всех школ, где текущий пользователь является ЛА."""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
@@ -471,13 +471,13 @@ async def la_remove_student(cq: CallbackQuery):
 
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if not school_ids:
-        return await cq.answer("Вы не привязаны ни к одной школе.", show_alert=True)
+        return await cq.answer("Вы не привязаны ни к одной университете.", show_alert=True)
 
 
     for sid in school_ids:
         await remove_student_from_school(sid, student_id)
 
-    await cq.answer("Ученик удалён из ваших школ.")
+    await cq.answer("Студент удалён из ваших университетов.")
 
     await la_edit_students(cq)
 
@@ -499,64 +499,69 @@ async def cb_la_info(cq: CallbackQuery):
     )
 
 
+def _format_la_list(title: str, icon: str, rows: list[dict], empty_text: str) -> str:
+    header = f"{icon} <b>{title}</b>"
+    if not rows:
+        return f"{header}\n\n{empty_text}"
+    lines = [
+        f"{idx}. {r['name']} (ID: <code>{r['UserID']}</code>)"
+        for idx, r in enumerate(rows, 1)
+    ]
+    return f"{header}\nВсего: <b>{len(rows)}</b>\n\n" + "\n".join(lines)
+
+
 @router.callback_query(F.data == CB_LA_LIST_TEACHERS)
 async def la_list_teachers(cq: CallbackQuery):
-    """Просмотреть список учителей (по школам текущего ЛА)."""
+    """Просмотреть список преподавателей (по университетам текущего ЛА)."""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
     try:
         teachers = await list_teachers_for_la(cq.from_user.id)
-        if not teachers:
-            return await cq.answer("❗ Учителей пока нет", show_alert=True)
-
-        lines = [
-            f"• {t['name']} (ID: <code>{t['UserID']}</code>)"
-            for t in teachers
-        ]
-        text = "👩‍🏫 <b>Учителя:</b>\n" + "\n".join(lines)
+        text = _format_la_list(
+            title="Преподаватели",
+            icon="👩‍🏫",
+            rows=teachers,
+            empty_text="Пока нет преподавателей в ваших университетах.",
+        )
         await cq.message.edit_text(text, reply_markup=_back_to_core_kb())
     except Exception as e:
-        await cq.answer(f"Ошибка: {e}", show_alert=True)
+        await cq.message.edit_text(f"❌ Ошибка: {e}", reply_markup=_back_to_core_kb())
 
 
 @router.callback_query(F.data == CB_LA_LIST_STUDENTS)
 async def la_list_students(cq: CallbackQuery):
-    """Просмотреть список учеников (по школам текущего ЛА)."""
+    """Просмотреть список студентов (по университетам текущего ЛА)."""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
     try:
         students = await list_students_for_la(cq.from_user.id)
-        if not students:
-            return await cq.answer("❗ Учеников пока нет", show_alert=True)
-
-        lines = [
-            f"• {s['name']} (ID: <code>{s['UserID']}</code>)"
-            for s in students
-        ]
-        text = "👦 <b>Ученики:</b>\n" + "\n".join(lines)
+        text = _format_la_list(
+            title="Студенты",
+            icon="👦",
+            rows=students,
+            empty_text="Пока нет студентов в ваших университетах.",
+        )
         await cq.message.edit_text(text, reply_markup=_back_to_core_kb())
     except Exception as e:
-        await cq.answer(f"Ошибка: {e}", show_alert=True)
+        await cq.message.edit_text(f"❌ Ошибка: {e}", reply_markup=_back_to_core_kb())
 
 
 @router.callback_query(F.data == CB_LA_LIST_LOCAL_ADMINS)
 async def la_list_local_admins(cq: CallbackQuery):
-    """Просмотреть список локальных администраторов (по школам текущего ЛА)."""
+    """Просмотреть список локальных администраторов (по университетам текущего ЛА)."""
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
     try:
         admins = await list_local_admins_for_la(cq.from_user.id)
-        if not admins:
-            return await cq.answer("❗ Локальных администраторов пока нет", show_alert=True)
-
-        lines = [
-            f"• {a['name']} (ID: <code>{a['UserID']}</code>)"
-            for a in admins
-        ]
-        text = "🏫 <b>Локальные администраторы:</b>\n" + "\n".join(lines)
+        text = _format_la_list(
+            title="Локальные администраторы",
+            icon="🏫",
+            rows=admins,
+            empty_text="Пока нет локальных администраторов в ваших университетах.",
+        )
         await cq.message.edit_text(text, reply_markup=_back_to_core_kb())
     except Exception as e:
-        await cq.answer(f"Ошибка: {e}", show_alert=True)
+        await cq.message.edit_text(f"❌ Ошибка: {e}", reply_markup=_back_to_core_kb())
 
 
 
@@ -566,24 +571,24 @@ async def la_list_local_admins(cq: CallbackQuery):
 
 
 async def _handle_la_rename_teacher_step(msg: Message, st: dict):
-    """Обработка ввода нового имени учителя от ЛА"""
+    """Обработка ввода нового имени преподаватели от ЛА"""
     new_name = msg.text.strip()
     if not new_name:
         return await msg.answer("Имя не может быть пустым. Введите имя ещё раз:")
 
     teacher_id = st["teacher_id"]
     await set_user_name(teacher_id, new_name)
-    await msg.answer("Имя учителя обновлено.", reply_markup=la_core_kb())
+    await msg.answer("Имя преподавателя обновлено.", reply_markup=la_core_kb())
     
 async def _handle_la_rename_student_step(msg: Message, st: dict):
-    """Обработка ввода нового имени ученика от ЛА"""
+    """Обработка ввода нового имени студента от ЛА"""
     new_name = msg.text.strip()
     if not new_name:
         return await msg.answer("Имя не может быть пустым. Введите имя ещё раз:")
 
     student_id = st["student_id"]
     await set_user_name(student_id, new_name)
-    await msg.answer("Имя ученика обновлено.", reply_markup=la_core_kb())
+    await msg.answer("Имя студента обновлено.", reply_markup=la_core_kb())
 
 
 @router.message(F.text, HasLaState())
@@ -616,16 +621,16 @@ async def handle_la_text_input(msg: Message):
         if mode == "la_create_school":
             name = raw
             if not name:
-                return await msg.answer("Введите название школы:", reply_markup=back_kb())
+                return await msg.answer("Введите название университета:", reply_markup=back_kb())
             try:
                 school_id = await create_school(name=name, short_name=None, address=None)
                 await ensure_user_with_post(msg.from_user.id, post="local_admin", name=msg.from_user.full_name)
                 await assign_local_admin(school_id, msg.from_user.id)
             except Exception as e:
-                return await msg.answer(f"Не удалось создать школу: {e}", reply_markup=la_core_kb())
+                return await msg.answer(f"Не удалось создать университет: {e}", reply_markup=la_core_kb())
 
             await msg.answer(
-                f"✅ Школа «{name}» создана. Вы назначены local_admin для неё.",
+                f"✅ Университет «{name}» создана. Вы назначены local_admin для неё.",
                 reply_markup=la_core_kb()
             )
             return
@@ -633,12 +638,12 @@ async def handle_la_text_input(msg: Message):
 
         if mode == "assign_teacher":
             school_id = st.get("school_id")
-            school_name = st.get("school_name", "выбранная школа")
+            school_name = st.get("school_name", "выбранная университет")
             step = st.get("step", 0)
 
             if school_id is None:
                 return await msg.answer(
-                    "❌ Не найдена школа в состоянии. Попробуйте заново через меню локального администратора.",
+                    "❌ Не найдена университет в состоянии. Попробуйте заново через меню локального администратора.",
                     reply_markup=la_core_kb()
                 )
 
@@ -655,7 +660,7 @@ async def handle_la_text_input(msg: Message):
                 LA_STATE[msg.from_user.id] = st
                 keep_state = True
                 return await msg.answer(
-                    "Шаг 2/2: Введите имя учителя:",
+                    "Шаг 2/2: Введите имя преподавателя:",
                     reply_markup=back_kb()
                 )
 
@@ -664,14 +669,14 @@ async def handle_la_text_input(msg: Message):
                 if not teacher_name:
                     keep_state = True
                     return await msg.answer(
-                        "Введите имя учителя:",
+                        "Введите имя преподавателя:",
                         reply_markup=back_kb()
                     )
 
                 teacher_id = st.get("teacher_id")
                 if teacher_id is None:
                     return await msg.answer(
-                        "❌ Не удалось определить Telegram ID учителя. Попробуйте назначение заново.",
+                        "❌ Не удалось определить Telegram ID преподавателя. Попробуйте назначение заново.",
                         reply_markup=la_core_kb()
                     )
 
@@ -679,7 +684,7 @@ async def handle_la_text_input(msg: Message):
                 await assign_teacher_to_school(school_id, teacher_id)
 
                 await msg.answer(
-                    f"✅ Учитель <b>{teacher_name}</b> (ID <code>{teacher_id}</code>) назначен в школу <b>{school_name}</b>.",
+                    f"✅ Преподаватель <b>{teacher_name}</b> (ID <code>{teacher_id}</code>) назначен в университет <b>{school_name}</b>.",
                     reply_markup=la_core_kb()
                 )
                 return
@@ -692,11 +697,11 @@ async def handle_la_text_input(msg: Message):
         if mode == "assign_student":
             ok = await create_student_for_school(user_id, msg.from_user.id)
             if ok:
-                await msg.answer(f"✅ Ученик <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
+                await msg.answer(f"✅ Студент <code>{user_id}</code> добавлен.", reply_markup=la_core_kb())
             else:
                 await msg.answer(
-                    "❌ Не удалось добавить ученика.\n"
-                    "Проверьте, что вы привязаны как ЛА к школе.",
+                    "❌ Не удалось добавить студента.\n"
+                    "Проверьте, что вы привязаны как ЛА к университете.",
                     reply_markup=la_core_kb()
                 )
 

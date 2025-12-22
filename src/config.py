@@ -45,7 +45,7 @@ try:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_community.chat_models import ChatOllama
 
-    SYSTEM_PROMPT = "Ты - лучший помощник по школьным вопросам. Общайся вежливо, уважительно и профессионально"
+    SYSTEM_PROMPT = "Ты - лучший помощник по университетским вопросам. Общайся вежливо, уважительно и профессионально"
     PROMPT = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
         ("human",

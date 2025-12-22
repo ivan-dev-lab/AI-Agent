@@ -103,7 +103,7 @@ async def ensure_db() -> None:
                 FOREIGN KEY(user_id)   REFERENCES users(UserID) ON DELETE CASCADE
             );
 
-            /* Учителя по школам */
+            /* преподаватели по школам */
             CREATE TABLE IF NOT EXISTS school_teachers (
                 school_id INTEGER NOT NULL,
                 user_id   INTEGER NOT NULL,
@@ -425,7 +425,7 @@ async def list_classes_for_student(student_id: int) -> list:
 
 async def list_teachers_for_student(student_id: int) -> list:
     """
-    Учителя берутся по школам, где числится ученик: school_students -> school_teachers.
+    преподаватели берутся по школам, где числится ученик: school_students -> school_teachers.
     """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -497,7 +497,7 @@ async def create_student_for_school(user_id: int, la_user_id: int) -> bool:
             return False
         
 async def create_teacher_for_school(user_id: int, la_user_id: int) -> bool:
-    """Добавляет пользователя как учителя в школу(ы) локального админа."""
+    """Добавляет пользователя как преподаватели в школу(ы) локального админа."""
     school_ids = await _get_school_ids_for_la(la_user_id)
     if not school_ids:
         return False
@@ -527,7 +527,7 @@ async def generate_temp_password() -> str:
 
 
 async def register_pending_teacher(user_id: int, la_user_id: int):
-    """Добавляет временного учителя, ожидающего подтверждения."""
+    """Добавляет временного преподаватели, ожидающего подтверждения."""
     password = await generate_temp_password()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -545,7 +545,7 @@ async def register_pending_teacher(user_id: int, la_user_id: int):
 
 
 async def get_pending_teachers(la_user_id: int):
-    """Возвращает список ожидающих подтверждения учителей."""
+    """Возвращает список ожидающих подтверждения преподавателей."""
     async with aiosqlite.connect(DB_PATH) as db:
         rows = await fetchall(db, "SELECT user_id, password FROM pending_teachers WHERE la_user_id = ?", (la_user_id,))
         return rows
@@ -602,9 +602,16 @@ async def list_students_for_la(la_user_id: int) -> list[dict]:
             FROM school_students ss
             JOIN users u ON u.UserID = ss.user_id
             WHERE ss.school_id IN ({placeholders})
+            UNION
+            SELECT DISTINCT u.UserID, COALESCE(u.name, 'Без имени') AS name
+            FROM enrollments e
+            JOIN users u ON u.UserID = e.student_id
+            JOIN classes c ON c.id = e.class_id
+            JOIN school_teachers st ON st.user_id = c.owner_chat_id
+            WHERE st.school_id IN ({placeholders})
             ORDER BY name COLLATE NOCASE
             """,
-            tuple(school_ids)
+            tuple(school_ids) * 2
         )
         return [dict(r) for r in rows]
 
@@ -805,144 +812,6 @@ async def upcoming_tasks_for_student(student_id: int, limit: int = 10) -> list:
             """,
             (student_id, student_id, limit)
         )
-
-
-async def seed_test_data(
-    user_records: Optional[Iterable[Tuple[int, str, str, int]]] = None,
-) -> None:
-    now = datetime.now(DEFAULT_TZINFO).isoformat()
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-
-        if user_records:
-            await db.executemany(
-                """
-                INSERT OR IGNORE INTO users(UserID, name, post, active)
-                VALUES (?, ?, ?, ?)
-                """,
-                list(user_records),
-            )
-
-        schools_data = [
-            ("Школа №1", "Шк1", "Город, улица 1", "Europe/Moscow"),
-            ("Школа №2", "Шк2", "Город, улица 2", "Europe/Moscow"),
-        ]
-        school_ids: List[int] = []
-
-        for name, short_name, address, tz in schools_data:
-            await db.execute(
-                """
-                INSERT OR IGNORE INTO schools(name, short_name, address, timezone, created_utc, updated_utc)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (name, short_name, address, tz, now, now),
-            )
-            row = await db.execute("SELECT id FROM schools WHERE name = ?", (name,))
-            school_row = await row.fetchone()
-            if school_row:
-                school_ids.append(school_row["id"])
-
-        cur = await db.execute("SELECT UserID FROM users WHERE post = 'local_admin'")
-        la_ids = [r["UserID"] for r in await cur.fetchall()]
-
-        cur = await db.execute("SELECT UserID FROM users WHERE post = 'teacher'")
-        teacher_ids = [r["UserID"] for r in await cur.fetchall()]
-
-        cur = await db.execute("SELECT UserID FROM users WHERE post = 'student'")
-        student_ids = [r["UserID"] for r in await cur.fetchall()]
-
-        if school_ids and la_ids:
-            await db.executemany(
-                """
-                INSERT OR IGNORE INTO school_local_admins(school_id, user_id)
-                VALUES (?, ?)
-                """,
-                [(school_ids[0], uid) for uid in la_ids],
-            )
-
-        for idx, tid in enumerate(teacher_ids):
-            if not school_ids:
-                break
-            school_id = school_ids[idx % len(school_ids)]
-            await db.execute(
-                """
-                INSERT OR IGNORE INTO school_teachers(school_id, user_id)
-                VALUES (?, ?)
-                """,
-                (school_id, tid),
-            )
-
-        for idx, sid in enumerate(student_ids):
-            if not school_ids:
-                break
-            school_id = school_ids[idx % len(school_ids)]
-            await db.execute(
-                """
-                INSERT OR IGNORE INTO school_students(school_id, user_id)
-                VALUES (?, ?)
-                """,
-                (school_id, sid),
-            )
-
-        classes_data = [
-            ("9А класс",  1000000001, "Europe/Moscow"),
-            ("10Б класс", 1000000002, "Europe/Moscow"),
-        ]
-        class_ids: List[int] = []
-
-        for name, owner_chat_id, tz in classes_data:
-            await db.execute(
-                """
-                INSERT OR IGNORE INTO classes(name, owner_chat_id, timezone)
-                VALUES (?, ?, ?)
-                """,
-                (name, owner_chat_id, tz),
-            )
-            row = await db.execute("SELECT id FROM classes WHERE name = ?", (name,))
-            class_row = await row.fetchone()
-            if class_row:
-                class_ids.append(class_row["id"])
-
-        if class_ids and student_ids:
-            await db.executemany(
-                """
-                INSERT OR IGNORE INTO enrollments(student_id, class_id)
-                VALUES (?, ?)
-                """,
-                [(sid, class_ids[0]) for sid in student_ids],
-            )
-
-        for cid in class_ids:
-            await db.execute(
-                """
-                INSERT INTO tasks(class_id, title, description, due_utc, created_utc)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    cid,
-                    "Домашнее задание №1",
-                    "Сделать упражнение 1–10.",
-                    datetime.now(DEFAULT_TZINFO).isoformat(),
-                    now,
-                ),
-            )
-            await db.execute(
-                """
-                INSERT INTO tasks(class_id, title, description, due_utc, created_utc)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    cid,
-                    "Контрольная работа",
-                    "Подготовиться к контрольной.",
-                    datetime.now(DEFAULT_TZINFO).isoformat(),
-                    now,
-                ),
-            )
-
-        await db.commit()
-
 
 
 

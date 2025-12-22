@@ -137,13 +137,13 @@ def _format_task_context(task_row) -> str:
 
 def _build_ai_messages(task_ctx: str, user_question: str) -> list[dict]:
     system_prompt = (
-        "Ты дружелюбный учебный ассистент. Помогаешь школьнику разобраться с домашним заданием, "
+        "Ты дружелюбный учебный ассистент. Помогаешь университетскику разобраться с домашним заданием, "
         "объясняешь шаги и даёшь короткий, понятный ответ. Если чего-то не хватает в условии, "
         "подскажи, что уточнить. Не придумывай факты."
     )
     user_prompt = (
         f"Контекст задания:\n{task_ctx}\n\n"
-        f"Вопрос ученика:\n{user_question}\n\n"
+        f"Вопрос студента:\n{user_question}\n\n"
         "Дай чёткий, пошаговый ответ. Если нужно — предложи простой пример или план решения."
     )
     return [
@@ -186,14 +186,14 @@ class AskAIState(StatesGroup):
 async def student_menu_cmd(msg: Message):
     if not await ensure_role(msg.from_user.id, "student", msg):
         return
-    await msg.answer("🎓 Меню ученика", reply_markup=student_menu_kb())
+    await msg.answer("🎓 Меню студента", reply_markup=student_menu_kb())
 
 
 @router.callback_query(F.data == CB_STU_MENU)
 async def student_menu_cb(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
         return
-    await cq.message.edit_text("🎓 Меню ученика", reply_markup=student_menu_kb())
+    await cq.message.edit_text("🎓 Меню студента", reply_markup=student_menu_kb())
     await cq.answer()
 
 
@@ -315,7 +315,7 @@ async def process_ai_query(message: Message, state: FSMContext):
 
     typing_task.cancel()
     ai_answer = _normalize_ai_answer(ai_answer)
-    final_text = f"🤖 Ответ нейросети по заданию
+    final_text = f"🤖 Ответ нейросети по заданию"
     try:
         await status_msg.edit_text(final_text, parse_mode="Markdown")
     except Exception:
@@ -337,11 +337,11 @@ async def student_teachers(cq: CallbackQuery):
 
     from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 В меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🔙 В меню студента", callback_data=CB_STU_MENU)],
     ])
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🔙 Меню студента", callback_data=CB_STU_MENU)],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_BACK)],
     ])
     await cq.message.edit_text(text, reply_markup=kb)
@@ -363,7 +363,7 @@ async def student_groups(cq: CallbackQuery):
 
     from keyboards import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 В меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🔙 В меню студента", callback_data=CB_STU_MENU)],
     ])
 
     await cq.message.edit_text(text, reply_markup=kb)
@@ -392,7 +392,7 @@ async def student_schedule(cq: CallbackQuery):
         text = "📆 Расписание / напоминания\n\n" + "\n".join(lines)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 В меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🔙 В меню студента", callback_data=CB_STU_MENU)],
     ])
 
 
@@ -415,10 +415,10 @@ async def student_info(cq: CallbackQuery):
         "ℹ️ <b>Информация</b>\n\n"
         "• Используйте раздел «📋 Мои задания», чтобы открыть список и подробности.\n"
         "• «📆 Расписание» показывает ближайшие дедлайны.\n"
-        "• По вопросам доступа — свяжитесь с администратором вашей школы."
+        "• По вопросам доступа — свяжитесь с администратором вашего университета."
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 В меню ученика", callback_data=CB_STU_MENU)],
+        [InlineKeyboardButton(text="🔙 В меню студента", callback_data=CB_STU_MENU)],
     ])
 
     await cq.message.edit_text(text, reply_markup=kb, parse_mode="HTML")

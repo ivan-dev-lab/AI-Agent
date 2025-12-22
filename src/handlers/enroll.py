@@ -18,7 +18,7 @@ router = Router()
 
 
 def _title(row) -> str:
-    """Отображаем имя ученика или его UserID."""
+    """Отображаем имя студента или его UserID."""
     try:
         name = row["name"]
     except Exception:
@@ -29,7 +29,7 @@ def _title(row) -> str:
         uid = row["UserID"]
     except Exception:
         uid = None
-    return f"UserID {uid}" if uid is not None else "Неизвестный ученик"
+    return f"UserID {uid}" if uid is not None else "Неизвестный студент"
 
 
 @router.callback_query(F.data == CB_ENROLL)
@@ -44,10 +44,10 @@ async def cb_enroll(cq: CallbackQuery):
         )
 
     if not students:
-        return await cq.message.edit_text("Пока нет учеников.", reply_markup=back_kb())
+        return await cq.message.edit_text("Пока нет студентов.", reply_markup=back_kb())
 
     rows = [(_title(s), f"{CB_ENROLL_PICK_STU}{s['UserID']}") for s in students]
-    await cq.message.edit_text("🔗 <b>Выберите ученика</b>:", reply_markup=single_col_kb(rows))
+    await cq.message.edit_text("🔗 <b>Выберите студента</b>:", reply_markup=single_col_kb(rows))
 
 
 @router.callback_query(F.data.startswith(CB_ENROLL_PICK_STU))
@@ -63,14 +63,14 @@ async def cb_enroll_pick_student(cq: CallbackQuery):
         classes = await fetchall(db, "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC")
 
     if not s:
-        return await cq.answer("Ученик не найден", show_alert=True)
+        return await cq.answer("Студент не найден", show_alert=True)
     if not classes:
         return await cq.message.edit_text("Пока нет классов. Сначала создайте класс.", reply_markup=back_kb())
 
     rows = [(c["name"], f"{CB_ENROLL_PICK_CLS}{student_id}:{c['id']}") for c in classes]
     rows.append(("⏭ Пропустить", CB_STU_AFTER_ADD_SKIP))
     await cq.message.edit_text(
-        f"🔗 Ученик: <b>{_title(s)}</b>\n\nВыберите <b>класс</b>:",
+        f"🔗 Студент: <b>{_title(s)}</b>\n\nВыберите <b>класс</b>:",
         reply_markup=single_col_kb(rows)
     )
 
@@ -90,7 +90,7 @@ async def cb_enroll_pick_class(cq: CallbackQuery):
         s = await fetchone(db, "SELECT UserID, name FROM users WHERE UserID=?", (student_id,))
         c = await fetchone(db, "SELECT id, name FROM classes WHERE id=?", (class_id,))
         if not s or not c:
-            return await cq.answer("Ученик или класс не найден", show_alert=True)
+            return await cq.answer("Студент или класс не найден", show_alert=True)
         try:
 
             await db.execute(
@@ -103,7 +103,7 @@ async def cb_enroll_pick_class(cq: CallbackQuery):
 
     await cq.message.edit_text(
         f"✅ Привязка выполнена:\n"
-        f"Ученик: <b>{_title(s)}</b>\n"
+        f"Студент: <b>{_title(s)}</b>\n"
         f"Класс: <b>{c['name']}</b>",
         reply_markup=back_kb()
     )

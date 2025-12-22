@@ -52,22 +52,22 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="➕ Добавить задание", callback_data=CB_ADD_TASK)],
         [InlineKeyboardButton(text="📋 Список заданий", callback_data=CB_LIST_TASKS)],
         [InlineKeyboardButton(text="🏷 Добавить класс", callback_data=CB_ADD_CLASS)],
-        [InlineKeyboardButton(text="👤 Добавить ученика", callback_data=CB_ADD_STUDENT)],
-        [InlineKeyboardButton(text="🔗 Записать ученика в класс", callback_data=CB_ENROLL)],
-        [InlineKeyboardButton(text="💬 Привязать чат ученика", callback_data=CB_REGISTER)],
+        [InlineKeyboardButton(text="👤 Добавить студента", callback_data=CB_ADD_STUDENT)],
+        [InlineKeyboardButton(text="🔗 Записать студента в класс", callback_data=CB_ENROLL)],
+        [InlineKeyboardButton(text="💬 Привязать чат студента", callback_data=CB_REGISTER)],
         [InlineKeyboardButton(text="🤖 Сгенерировать код (описанием)", callback_data=CB_GEN)],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data=CB_SETTINGS)],
     ])
 
 def teacher_main_kb() -> InlineKeyboardMarkup:
     """
-    Главное меню для роли Учитель (teacher).
-    Пункты соответствуют скриншоту: назначить ученика, редактирование учеников,
+    Главное меню для роли Преподаватель (teacher).
+    Пункты соответствуют скриншоту: назначить студента, редактирование студентов,
     создать группу, редактировать группу (добавить/удалить), добавить задание, список заданий.
     """
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👨‍🎓 Добавить ученика", callback_data=CB_T_ASSIGN_STUDENT)],
-        [InlineKeyboardButton(text="✏️ Редактировать учеников", callback_data=CB_T_EDIT_STUDENTS)],
+        [InlineKeyboardButton(text="👨‍🎓 Добавить студента", callback_data=CB_T_ASSIGN_STUDENT)],
+        [InlineKeyboardButton(text="✏️ Редактировать студентов", callback_data=CB_T_EDIT_STUDENTS)],
         [InlineKeyboardButton(text="📁 Создать группу", callback_data=CB_T_CREATE_GROUP)],
         [InlineKeyboardButton(text="⚙️ Редактировать группу (добавить/удалить)", callback_data=CB_T_EDIT_GROUP)],
         [InlineKeyboardButton(text="➕ Добавить задание", callback_data=CB_T_ADD_TASK)],
@@ -124,11 +124,11 @@ def la_panel_kb() -> InlineKeyboardMarkup:
 
 def la_core_kb() -> InlineKeyboardMarkup:
     rows = [
-        ('🏫 Создать школу и назначить себя', CB_LA_CREATE_SCHOOL),
-        ('👩‍🏫 Назначить учителя', CB_LA_ASSIGN_TEACHER),
-        ('👨‍🎓 Назначить ученика', CB_LA_ASSIGN_STUDENT),
-        ('✏️ Редактировать учителей', CB_LA_EDIT_TEACHERS),
-        ('📚 Редактировать учеников', CB_LA_EDIT_STUDENTS),
+        ('🏫 Создать университет и назначить себя', CB_LA_CREATE_SCHOOL),
+        ('👩‍🏫 Назначить преподавателя', CB_LA_ASSIGN_TEACHER),
+        ('👨‍🎓 Назначить студента', CB_LA_ASSIGN_STUDENT),
+        ('✏️ Редактировать преподавателей', CB_LA_EDIT_TEACHERS),
+        ('📚 Редактировать студентов', CB_LA_EDIT_STUDENTS),
         ('↩️ Назад к разделам', CB_LA_BACK_TO_CORE),
     ]
     return single_col_kb(rows)
@@ -136,8 +136,8 @@ def la_core_kb() -> InlineKeyboardMarkup:
 
 def la_info_kb() -> InlineKeyboardMarkup:
     rows = [
-        ("📋 Список учителей", CB_LA_LIST_TEACHERS),
-        ("📋 Список учеников", CB_LA_LIST_STUDENTS),
+        ("📋 Список преподавателей", CB_LA_LIST_TEACHERS),
+        ("📋 Список студентов", CB_LA_LIST_STUDENTS),
         ("📋 Список локальных админов", CB_LA_LIST_LOCAL_ADMINS),
         ("⬅ Назад к разделам", CB_LA_BACK_TO_CORE)
     ]

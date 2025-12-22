@@ -61,7 +61,7 @@ async def _handle_la_password_input(msg: Message):
     pop_auth_state(msg.from_user.id)
 
     await msg.answer(
-        "Пароль принят. Вас добавили в БД как local_admin без привязки к школе."
+        "Пароль принят. Вас добавили в БД как local_admin без привязки к университете."
     )
     await show_main_menu(msg)
 
@@ -158,8 +158,8 @@ async def on_text(msg: Message):
             if not classes:
                 USER_STATE.pop(msg.from_user.id, None)
                 return await msg.answer(
-                    f"✅ Ученик добавлен: <b>{data['display_name']}</b>\n\n"
-                    f"Пока нет классов — создайте класс и запишите ученика позже.",
+                    f"✅ Студент добавлен: <b>{data['display_name']}</b>\n\n"
+                    f"Пока нет классов — создайте класс и запишите студента позже.",
                     reply_markup=back_kb()
                 )
 
@@ -180,13 +180,13 @@ async def on_text(msg: Message):
             if not classes:
                 USER_STATE.pop(msg.from_user.id, None)
                 return await msg.answer(
-                    "Пока нет классов. Сначала создайте класс, затем повторите добавление ученика.",
+                    "Пока нет классов. Сначала создайте класс, затем повторите добавление студента.",
                     reply_markup=back_kb()
                 )
 
             rows = [(c["name"], f"{CB_LA_ASSIGN_PICK_CLS}{c['id']}") for c in classes]
             return await msg.answer(
-                "Шаг 2/2: выберите класс, в который добавить ученика:",
+                "Шаг 2/2: выберите класс, в который добавить студента:",
                 reply_markup=single_col_kb(rows)
             )
 
@@ -195,7 +195,7 @@ async def on_text(msg: Message):
             rows = [(c["name"], f"{CB_ENROLL_PICK_CLS}{new_id}:{c['id']}") for c in classes]
             rows.append(("⏭ Пропустить", CB_STU_AFTER_ADD_SKIP))
             return await msg.answer(
-                f"✅ Ученик добавлен: <b>{data['display_name']}</b>\n\n"
+                f"✅ Студент добавлен: <b>{data['display_name']}</b>\n\n"
                 f"Сразу записать в класс?",
                 reply_markup=single_col_kb(rows)
             )
@@ -217,13 +217,13 @@ async def on_text(msg: Message):
             if not classes:
                 USER_STATE.pop(msg.from_user.id, None)
                 return await msg.answer(
-                    "Пока нет групп. Сначала создайте группу, затем повторите добавление ученика.",
+                    "Пока нет групп. Сначала создайте группу, затем повторите добавление студента.",
                     reply_markup=back_kb()
                 )
 
             rows = [(c["name"], f"{CB_T_ASSIGN_PICK_CLS}{c['id']}") for c in classes]
             return await msg.answer(
-                "Шаг 2/2: выберите группу, в которую добавить ученика:",
+                "Шаг 2/2: выберите группу, в которую добавить студента:",
                 reply_markup=single_col_kb(rows)
             )
 
@@ -247,8 +247,8 @@ async def on_text(msg: Message):
         USER_STATE.pop(msg.from_user.id, None)
 
         rows = [
-            ("◀️ Продолжить редактирование этого ученика", f"{CB_T_EDIT_PICK_STU}{student_id}:{class_id}"),
-            ("⬅ Назад к ученикам класса",                 f"{CB_T_EDIT_BACK_STUDENTS}{class_id}"),
+            ("◀️ Продолжить редактирование этого студента", f"{CB_T_EDIT_PICK_STU}{student_id}:{class_id}"),
+            ("⬅ Назад к студентам класса",                 f"{CB_T_EDIT_BACK_STUDENTS}{class_id}"),
         ]
         return await msg.answer(
             f"✅ ФИО обновлено: <b>{new_name}</b>",
@@ -342,7 +342,7 @@ async def on_text(msg: Message):
                 if cur.rowcount == 0:
                     USER_STATE.pop(msg.from_user.id, None)
                     return await msg.answer(
-                        "❌ Группа не найдена или принадлежит другому учителю.",
+                        "❌ Группа не найдена или принадлежит другому преподавателю.",
                         reply_markup=single_col_kb([("⬅ Назад к списку групп", CB_T_GEDIT_BACK_GROUPS)])
                     )
             except aiosqlite.IntegrityError:
@@ -369,7 +369,7 @@ async def on_text(msg: Message):
 
         USER_STATE.pop(msg.from_user.id, None)
         return await msg.answer(
-            "В текущей версии БД привязка чата ученика отключена (в таблице users нет chat_id).\n"
+            "В текущей версии БД привязка чата студента отключена (в таблице users нет chat_id).\n"
             "Если нужна — добавим отдельную таблицу, скажи.",
             reply_markup=back_kb()
         )
@@ -459,7 +459,7 @@ async def on_text(msg: Message):
             scope = state.get("data", {}).get("scope")
             extra = ""
             if scope == "sel":
-                extra = f"\nНазначено выбранным ученикам: <b>{len(target_ids)}</b>"
+                extra = f"\nНазначено выбранным студентам: <b>{len(target_ids)}</b>"
             else:
                 extra = f"\nНазначено всей группе: <b>{len(target_ids)}</b>"
 

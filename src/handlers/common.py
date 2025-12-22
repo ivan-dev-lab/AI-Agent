@@ -34,17 +34,17 @@ async def _show_main_for(user_id: int, target: Message | CallbackQuery):
 
     elif await has_post(user_id, "student"):
         text = (
-            "👨‍🎓 <b>Меню ученика</b>\n\n"
+            "👨‍🎓 <b>Меню студента</b>\n\n"
             "• Посмотреть задания\n"
             "• Посмотреть класс\n"
-            "• Учителя школы"
+            "• Преподаватели университета"
         )
         kb = student_menu_kb()
 
 
     elif await has_post(user_id, "teacher"):
         text = (
-            "👩‍🏫 <b>Меню учителя</b>\n\n"
+            "👩‍🏫 <b>Меню преподавателя</b>\n\n"
             "Выберите действие."
         )
         kb = teacher_main_kb()
@@ -95,7 +95,7 @@ async def cmd_start(msg: Message, command: CommandObject):
 
         await msg.answer(
             "🎉 <b>Добро пожаловать!</b>\n\n"
-            "Вы зарегистрированы как <b>ученик</b>.\n"
+            "Вы зарегистрированы как <b>студент</b>.\n"
             f"👤 Имя в системе: <b>{display_name}</b>\n"
             f"📁 Группа: <b>{class_name}</b>",
             reply_markup=back_kb()
