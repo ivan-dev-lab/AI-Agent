@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from datetime import datetime, timedelta
@@ -21,7 +21,7 @@ router = Router()
 
 @router.callback_query(F.data == CB_LIST_TASKS)
 async def list_tasks(cq: CallbackQuery):
-    # (примерный код списка -- оставлен как в проекте)
+
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await fetchall(conn, "SELECT t.id, t.title, c.name as class_name, t.due_utc, c.timezone FROM tasks t JOIN classes c ON t.class_id=c.id")
@@ -35,7 +35,7 @@ async def list_tasks(cq: CallbackQuery):
         if due_dt.tzinfo is None:
             due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
         due_local_str = fmt_dt_local(due_dt, tz)
-        lines.append(f"#{r['id']} • {r['class_name']} • <b>{r['title']}</b> — {due_local_str}")
+        lines.append(f"
     text = "\n".join(lines)
     await cq.message.edit_text(text, reply_markup=back_kb())
 
@@ -49,7 +49,7 @@ async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
     if not t:
         await cb.answer("Задание не найдено", show_alert=True); return
     try:
-        tz_name = t["timezone"] if "timezone" in t.keys() else None  # type: ignore[attr-defined]
+        tz_name = t["timezone"] if "timezone" in t.keys() else None
     except Exception:
         tz_name = None
     try:
@@ -66,11 +66,10 @@ async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
         f"Дедлайн: <b>{due_local}</b>\n\n"
         f"{t['description'] or '—'}"
     )
-    # <- здесь было: task_detail_kb(callback_data.page)
+
     await cb.message.edit_text(text, reply_markup=task_detail_kb(callback_data.page, callback_data.task_id))
     await cb.answer()
 
-# (дальше в файле могут быть другие обработчики; я не трогал остальной код)
 
 
 
@@ -80,27 +79,28 @@ async def task_detail(cb: CallbackQuery, callback_data: TaskCB):
 
 
 
-# -------------------------------
-# Функция удаления старых задач
-# -------------------------------
+
+
+
+
 async def delete_old_tasks():
     """Удаляет задачи, у которых дедлайн прошел более 168 часов назад."""
     cutoff_time = datetime.now(DEFAULT_TZINFO) - timedelta(hours=168)
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        # Получаем удаляемые задачи для логирования (опционально)
+
         old_tasks = await db.execute_fetchall(
             "SELECT id, title FROM tasks WHERE due_utc <= ?", (cutoff_time.isoformat(),)
         )
-        # Удаляем старые задачи
+
         await db.execute("DELETE FROM tasks WHERE due_utc <= ?", (cutoff_time.isoformat(),))
         await db.commit()
     if old_tasks:
         print(f"Удалены старые задачи: {[t['title'] for t in old_tasks]}")
 
-# -------------------------------
-# Добавление нового задания
-# -------------------------------
+
+
+
 @router.callback_query(F.data == CB_ADD_TASK)
 async def cb_add_task(cq: CallbackQuery):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -149,6 +149,6 @@ async def cb_add_task_pick_class(cq: CallbackQuery):
         reply_markup=back_kb()
     )
 
-# -------------------------------
-# Просмотр списка заданий
-# -------------------------------
+
+
+

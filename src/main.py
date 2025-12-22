@@ -1,4 +1,4 @@
-# src/main.py
+
 import asyncio
 import os
 import dotenv
@@ -30,13 +30,11 @@ async def main():
 
     bot = Bot(token=BOT_TOKEN, default=default_props)
 
-    # Планировщик напоминаний (APScheduler) + поднятие сохранённых jobs из БД
     await init_scheduler(bot)
     dp = Dispatcher()
 
-    # Подключаем все роутеры
     dp.include_router(common_router)
-    dp.include_router(la_router)        # NEW: меню локального администратора
+    dp.include_router(la_router)       
     dp.include_router(enroll_router)
     dp.include_router(tasks_router)
     dp.include_router(students_router)
@@ -44,7 +42,6 @@ async def main():
     dp.include_router(gen_router)
     dp.include_router(teacher_router)
 
-    # ТЕКСТОВЫЙ — САМЫМ ПОСЛЕДНИМ
     dp.include_router(text_router)
 
     print("Bot is running. Press Ctrl+C to stop.")

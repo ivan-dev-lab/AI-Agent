@@ -1,4 +1,4 @@
-# src/handlers/teacher.py
+
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 import aiosqlite
@@ -171,7 +171,7 @@ async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: i
         stu = await fetchone(db, "SELECT COALESCE(name,'(без имени)') AS name FROM users WHERE UserID=?", (student_id,))
         stu_name = stu["name"] if stu else f"ID {student_id}"
 
-        # Только индивидуальные задачи, назначенные этому ученику
+
         tasks = await fetchall(
             db,
             """
@@ -188,7 +188,7 @@ async def _vt_show_student_tasks(cq: CallbackQuery, class_id: int, student_id: i
     rows = []
     lines_out: list[str] = []
     for idx, t in enumerate(tasks, 1):
-        marker = "👤"  # индивидуальное
+        marker = "👤"
         try:
             due_local = _format_due_simple(t["due_utc"])
             suffix = f" · {due_local}" if due_local else ""
@@ -263,7 +263,7 @@ async def _task_show_students_select(cq: CallbackQuery, class_id: int, selected:
     for s in students:
         mark = "✅ " if s["id"] in selected else ""
         rows.append( (f"{mark}{s['name']}", f"{CB_T_TASK_PICK_STU}{s['id']}:{class_id}") )
-    # «Готово» и «Назад»
+
     rows.append(("✅ Готово", f"{CB_T_TASK_PICK_DONE}{class_id}"))
     rows.append(("⬅ Назад", f"{CB_T_TASK_BACK_SCOPE}{class_id}"))
 
@@ -306,12 +306,12 @@ async def _show_group_actions(cq: CallbackQuery, class_id: int):
             (class_id, cq.from_user.id)
         )
 
-    # Если группа не найдена или принадлежит другому учителю — просто выходим
+
     if not cls:
         await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
         return
 
-    # Здесь rows объявляется ОДИН РАЗ и всегда, без условий
+
     rows = [
         ("🗑 Удалить группу",        f"{CB_T_GEDIT_ACTION}delgroup:{class_id}"),
         ("👤 Удалить ученика",       f"{CB_T_GEDIT_ACTION}delstudent:{class_id}"),
@@ -428,11 +428,11 @@ async def _show_student_actions(cq: CallbackQuery, student_id: int, class_id: in
     )
 
 
-# Показываем меню (если захотите показывать через callback CB_TEACHER_MENU)
-@router.callback_query(F.data == CB_BACK)  # back уже маршрутизируется в common, но оставим на случай
+
+@router.callback_query(F.data == CB_BACK)
 async def cb_t_back(cq: CallbackQuery):
-    # Перенаправление на общий back_to_main уже реализовано в common
-    # Эта заглушка просто закроет клавиатуру если нужно
+
+
     await cq.answer()
 
 @router.callback_query(F.data == CB_T_ASSIGN_STUDENT)
@@ -454,11 +454,11 @@ async def cb_t_edit_students(cq: CallbackQuery):
     if not await has_post(cq.from_user.id, "teacher"):
         return await cq.answer("Недостаточно прав", show_alert=True)
 
-    # сбрасываем возможные «висящие» состояния
+
     USER_STATE.pop(cq.from_user.id, None)
     await _show_edit_classes(cq)
 
-# Назад к списку групп
+
 @router.callback_query(F.data == CB_T_EDIT_BACK_CLASSES)
 async def cb_t_edit_back_classes(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq):
@@ -469,7 +469,7 @@ async def cb_t_edit_back_classes(cq: CallbackQuery):
     await _show_edit_classes(cq)
 
 
-# Выбор группы
+
 @router.callback_query(F.data.startswith(CB_T_EDIT_PICK_CLS))
 async def cb_t_edit_pick_cls(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq):
@@ -484,7 +484,7 @@ async def cb_t_edit_pick_cls(cq: CallbackQuery):
     await _show_students_of_class(cq, class_id)
 
 
-# Назад к списку учеников текущего класса
+
 @router.callback_query(F.data.startswith(CB_T_EDIT_BACK_STUDENTS))
 async def cb_t_edit_back_students(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq):
@@ -499,7 +499,7 @@ async def cb_t_edit_back_students(cq: CallbackQuery):
     await _show_students_of_class(cq, class_id)
 
 
-# Выбор ученика
+
 @router.callback_query(F.data.startswith(CB_T_EDIT_PICK_STU))
 async def cb_t_edit_pick_student(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq):
@@ -524,7 +524,7 @@ async def cb_t_create_group(cq: CallbackQuery):
     if not await has_post(cq.from_user.id, "teacher"):
         return await cq.answer("Недостаточно прав", show_alert=True)
 
-    # Запускаем мастер создания группы (режим add_class в handlers/text.py)
+
     USER_STATE[cq.from_user.id] = {"mode": "add_class", "step": 0, "data": {}}
     await cq.message.edit_text(
         "📁 <b>Создать группу</b>\n\n"
@@ -533,7 +533,7 @@ async def cb_t_create_group(cq: CallbackQuery):
     )
 
 
-# Выбор действия (ФИО или группа)
+
 @router.callback_query(F.data.startswith(CB_T_EDIT_ACTION))
 async def cb_t_edit_action(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -546,7 +546,7 @@ async def cb_t_edit_action(cq: CallbackQuery):
         return await cq.answer("Некорректные данные", show_alert=True)
 
     if action == "fio":
-        # Ждем ввод нового ФИО текстом
+
         USER_STATE[cq.from_user.id] = {
             "mode": "t_edit_students_fio",
             "student_id": student_id,
@@ -559,7 +559,7 @@ async def cb_t_edit_action(cq: CallbackQuery):
         )
 
     elif action == "group":
-        # Показать список доступных групп (все учительские)
+
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
             classes = await fetchall(
@@ -592,7 +592,7 @@ async def cb_t_edit_action(cq: CallbackQuery):
 
 
 
-# Назад к действиям по ученику (кнопка «⬅ Назад» из ввода ФИО / выбора новой группы)
+
 @router.callback_query(F.data.startswith(CB_T_EDIT_BACK_ACTIONS))
 async def cb_t_edit_back_actions(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -619,7 +619,7 @@ async def cb_t_edit_pick_newcls(cq: CallbackQuery):
         return await cq.answer("Некорректные данные", show_alert=True)
 
     if new_class_id == old_class_id:
-        # Ничего менять не надо — вернемся к действиям
+
         return await _show_student_actions(cq, student_id, old_class_id)
 
     try:
@@ -660,7 +660,7 @@ async def cb_t_edit_group(cq: CallbackQuery):
     USER_STATE.pop(cq.from_user.id, None)
     await _show_group_list_for_edit(cq)
 
-# Назад к списку групп
+
 @router.callback_query(F.data == CB_T_GEDIT_BACK_GROUPS)
 async def cb_t_gedit_back_groups(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -669,7 +669,7 @@ async def cb_t_gedit_back_groups(cq: CallbackQuery):
     await _show_group_list_for_edit(cq)
 
 
-# Выбор группы из списка
+
 @router.callback_query(F.data.startswith(CB_T_GEDIT_PICK_CLS))
 async def cb_t_gedit_pick_cls(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -682,7 +682,7 @@ async def cb_t_gedit_pick_cls(cq: CallbackQuery):
     await _show_group_actions(cq, class_id)
 
 
-# Назад к действиям выбранной группы
+
 @router.callback_query(F.data.startswith(CB_T_GEDIT_BACK_ACTIONS))
 async def cb_t_gedit_back_actions(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -699,13 +699,13 @@ async def cb_t_gedit_action(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
     if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
     try:
-        payload = cq.data.split(":", 1)[1]  # action:<class_id>
+        payload = cq.data.split(":", 1)[1]
         action, cls_str = payload.split(":")
         class_id = int(cls_str)
     except Exception:
         return await cq.answer("Некорректные данные", show_alert=True)
 
-    # Проверим, что группа принадлежит учителю
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
@@ -713,11 +713,11 @@ async def cb_t_gedit_action(cq: CallbackQuery):
         return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
 
     if action == "delgroup":
-        # Удалить группу: очищаем enrollments (+опционально tasks), затем удаляем класс
+
         try:
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute("DELETE FROM enrollments WHERE class_id=?", (class_id,))
-                # опционально удалим задания этой группы (если у вас есть таблица tasks)
+
                 try:
                     await db.execute("DELETE FROM tasks WHERE class_id=?", (class_id,))
                 except Exception:
@@ -737,11 +737,11 @@ async def cb_t_gedit_action(cq: CallbackQuery):
         )
 
     elif action == "delstudent":
-        # Показать список учеников этой группы
+
         return await _show_students_of_group_for_delete(cq, class_id)
 
     elif action == "rename":
-        # Запросить новое имя группы → текстовый ввод
+
         USER_STATE[cq.from_user.id] = {"mode": "t_group_rename", "class_id": class_id}
         rows = [("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")]
         return await cq.message.edit_text(
@@ -749,10 +749,10 @@ async def cb_t_gedit_action(cq: CallbackQuery):
             reply_markup=single_col_kb(rows)
         )
     elif action == "addstudent":
-        # Показать список доступных учеников для добавления в эту группу
+
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
-            # Все ученики с ролью student, которых ещё нет в этой группе
+
             students = await fetchall(
                 db,
                 """
@@ -797,7 +797,7 @@ async def cb_t_gdel_pick_student(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
     if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
     try:
-        payload = cq.data.split(":", 1)[1]  # <student_id>:<class_id>
+        payload = cq.data.split(":", 1)[1]
         stu_str, cls_str = payload.split(":")
         student_id = int(stu_str); class_id = int(cls_str)
     except Exception:
@@ -805,7 +805,7 @@ async def cb_t_gdel_pick_student(cq: CallbackQuery):
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        # проверим владение группой
+
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
             return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
@@ -840,7 +840,7 @@ async def cb_t_gadd_pick_student(cq: CallbackQuery):
         return await cq.answer("Недостаточно прав", show_alert=True)
 
     try:
-        payload = cq.data.split(":", 1)[1]  # <student_id>:<class_id>
+        payload = cq.data.split(":", 1)[1]
         stu_str, cls_str = payload.split(":")
         student_id = int(stu_str)
         class_id = int(cls_str)
@@ -849,7 +849,7 @@ async def cb_t_gadd_pick_student(cq: CallbackQuery):
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        # Проверим, что группа принадлежит этому учителю
+
         cls = await fetchone(db, "SELECT id, name FROM classes WHERE id=? AND owner_chat_id=?", (class_id, cq.from_user.id))
         if not cls:
             return await cq.answer("Группа не найдена или принадлежит другому учителю.", show_alert=True)
@@ -858,7 +858,7 @@ async def cb_t_gadd_pick_student(cq: CallbackQuery):
         stu_name = stu["name"] if stu else f"ID {student_id}"
 
         try:
-            # Добавляем в группу (если уже есть — INSERT OR IGNORE не создаст дубль)
+
             await db.execute(
                 "INSERT OR IGNORE INTO enrollments(student_id, class_id) VALUES(?, ?)",
                 (student_id, class_id)
@@ -914,14 +914,14 @@ async def cb_t_task_scope(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
     if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
     try:
-        payload = cq.data.split(":", 1)[1]  # scope:class_id
+        payload = cq.data.split(":", 1)[1]
         scope, cls_str = payload.split(":")
         class_id = int(cls_str)
     except Exception:
         return await cq.answer("Некорректные данные", show_alert=True)
 
     if scope == "cls":
-        # Идём сразу к вводу полей задания, переиспользуем существующий режим add_task
+
         USER_STATE[cq.from_user.id] = {
             "mode": "add_task",
             "step": 1,
@@ -933,7 +933,7 @@ async def cb_t_task_scope(cq: CallbackQuery):
         )
 
     elif scope == "sel":
-        # Включаем режим мультивыбора учеников
+
         USER_STATE[cq.from_user.id] = {
             "mode": "t_add_task_select",
             "class_id": class_id,
@@ -960,7 +960,7 @@ async def cb_t_task_pick_stu(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
     if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
     try:
-        payload = cq.data.split(":", 1)[1]  # student_id:class_id
+        payload = cq.data.split(":", 1)[1]
         stu_str, cls_str = payload.split(":")
         student_id = int(stu_str); class_id = int(cls_str)
     except Exception:
@@ -996,7 +996,7 @@ async def cb_t_task_pick_done(cq: CallbackQuery):
     if not selected:
         return await cq.answer("Выберите хотя бы одного ученика", show_alert=True)
 
-    # Переход к режиму add_task (ввод полей)
+
     USER_STATE[cq.from_user.id] = {
         "mode": "add_task",
         "step": 1,
@@ -1020,12 +1020,12 @@ async def cb_t_task_back_stus(cq: CallbackQuery):
     st = USER_STATE.get(cq.from_user.id)
     selected = set()
     if st and st.get("mode") in ("t_add_task_select","add_task") and st.get("class_id", st.get("data", {}).get("class_id")) == class_id:
-        # восстановим выделение, если оно было сохранено
+
         if st.get("mode") == "t_add_task_select":
             selected = set(st.get("selected") or [])
         elif st.get("mode") == "add_task":
             selected = set(st.get("data", {}).get("selected_students") or [])
-            # вернёмся в режим выбора
+
             USER_STATE[cq.from_user.id] = {"mode": "t_add_task_select", "class_id": class_id, "selected": selected}
     else:
         USER_STATE[cq.from_user.id] = {"mode": "t_add_task_select", "class_id": class_id, "selected": set()}
@@ -1033,7 +1033,7 @@ async def cb_t_task_back_stus(cq: CallbackQuery):
     await _task_show_students_select(cq, class_id, selected)
 
 
-# Старт: «Просмотреть список заданий»
+
 @router.callback_query(F.data == CB_T_LIST_TASKS)
 async def cb_t_list_tasks(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -1042,7 +1042,7 @@ async def cb_t_list_tasks(cq: CallbackQuery):
     await _vt_show_classes(cq)
 
 
-# Назад к списку групп
+
 @router.callback_query(F.data == CB_T_VTASK_BACK_CLASSES)
 async def cb_t_vtask_back_classes(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -1051,7 +1051,7 @@ async def cb_t_vtask_back_classes(cq: CallbackQuery):
     await _vt_show_classes(cq)
 
 
-# Выбор группы
+
 @router.callback_query(F.data.startswith(CB_T_VTASK_PICK_CLS))
 async def cb_t_vtask_pick_cls(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -1064,7 +1064,7 @@ async def cb_t_vtask_pick_cls(cq: CallbackQuery):
     await _vt_show_class_menu(cq, class_id)
 
 
-# Назад к ученикам выбранной группы
+
 @router.callback_query(F.data.startswith(CB_T_VTASK_BACK_STUDENTS))
 async def cb_t_vtask_back_students(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -1077,13 +1077,13 @@ async def cb_t_vtask_back_students(cq: CallbackQuery):
     await _vt_show_students(cq, class_id)
 
 
-# Выбор ученика
+
 @router.callback_query(F.data.startswith(CB_T_VTASK_PICK_STU))
 async def cb_t_vtask_pick_stu(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
     if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
     try:
-        payload = cq.data.split(":", 1)[1]  # student_id:class_id
+        payload = cq.data.split(":", 1)[1]
         stu_str, cls_str = payload.split(":")
         student_id = int(stu_str); class_id = int(cls_str)
     except Exception:
@@ -1095,13 +1095,13 @@ async def cb_t_vtask_pick_stu(cq: CallbackQuery):
         await _vt_show_student_tasks(cq, class_id, student_id)
 
 
-# Открыть одну задачу (подробности)
+
 @router.callback_query(F.data.startswith(CB_T_VTASK_OPEN))
 async def cb_t_vtask_open(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
     if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
     try:
-        payload = cq.data.split(":", 1)[1]  # task_id:student_id:class_id
+        payload = cq.data.split(":", 1)[1]
         t_str, stu_str, cls_str = payload.split(":")
         task_id = int(t_str); student_id = int(stu_str); class_id = int(cls_str)
     except Exception:
@@ -1292,7 +1292,7 @@ async def cb_t_vtask_delete(cq: CallbackQuery):
 
 
 
-# Меню группы: выбор раздела
+
 @router.callback_query(F.data.startswith(CB_T_VTASK_CLASS_MENU))
 async def cb_t_vtask_class_menu(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
@@ -1327,13 +1327,13 @@ async def cb_t_vtask_students(cq: CallbackQuery):
         return await cq.answer("Некорректные данные", show_alert=True)
     USER_STATE.pop(cq.from_user.id, None)
     await _vt_show_students(cq, class_id)
-# Назад от карточки задачи к списку задач ученика
+
 @router.callback_query(F.data.startswith(CB_T_VTASK_BACK_TASKS))
 async def cb_t_vtask_back_tasks(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq): return
     if not await has_post(cq.from_user.id, "teacher"): return await cq.answer("Недостаточно прав", show_alert=True)
     try:
-        payload = cq.data.split(":", 1)[1]  # student_id:class_id
+        payload = cq.data.split(":", 1)[1]
         stu_str, cls_str = payload.split(":")
         student_id = int(stu_str); class_id = int(cls_str)
     except Exception:
@@ -1348,7 +1348,7 @@ async def cb_t_assign_pick_class(cq: CallbackQuery):
     if not await has_post(cq.from_user.id, "teacher"):
         return await cq.answer("Недостаточно прав", show_alert=True)
 
-    # Парсим class_id
+
     try:
         class_id = int(cq.data.split(":", 1)[1])
     except Exception:
@@ -1362,13 +1362,13 @@ async def cb_t_assign_pick_class(cq: CallbackQuery):
     if not display_name:
         return await cq.answer("Не получено имя ученика", show_alert=True)
 
-    # Создаём приглашение
+
     try:
         token = await create_pending_student(display_name, class_id, created_by=cq.from_user.id)
     except Exception as e:
         return await cq.message.edit_text(f"❌ Ошибка создания приглашения: {e}", reply_markup=back_kb())
 
-    # Имя группы для сообщения (чисто для текста)
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT name FROM classes WHERE id = ?", (class_id,))

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from io import BytesIO

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.filters import Command
@@ -22,7 +22,7 @@ async def cb_add_class(cq: CallbackQuery):
 
 @router.message(Command("add_class"))
 async def legacy_add_class(msg: Message):
-    # поддержка, если вдруг введут командой
+
     name = msg.text.split(maxsplit=1)[1].strip() if len(msg.text.split(maxsplit=1)) > 1 else None
     if not name:
         return await msg.answer("Использование: /add_class name")

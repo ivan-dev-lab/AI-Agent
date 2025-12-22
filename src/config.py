@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 import os
 import dotenv
 from datetime import timedelta, timezone
@@ -13,11 +13,11 @@ if not BOT_TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в окружении (.env)")
 
 DB_PATH = os.getenv("DB_PATH", "agent.db")
-# Default timezone is UTC+5 (Etc/GMT-5 keeps a +5 offset in tzdata naming)
+
 DEFAULT_TZ = os.getenv("DEFAULT_TZ", "Etc/GMT-5")
-# Human-friendly label for prompts and UI
+
 DEFAULT_TZ_DISPLAY = os.getenv("DEFAULT_TZ_DISPLAY", "UTC+5")
-# Unified datetime format (input/output) is dd.mm.yyyy hh:mm in UTC+5 by default
+
 DATETIME_FORMAT = "%d.%m.%Y %H:%M"
 DATETIME_FORMAT_DISPLAY = "DD.MM.YYYY HH:MM"
 try:
@@ -28,8 +28,8 @@ DEFAULT_MODEL = os.getenv("MODEL_NAME", "llama3:8b")
 GENAPI_TOKEN = os.getenv("GENAPI_TOKEN", "")
 LOCAL_ADMIN_PASSWORD = os.getenv("LOCAL_ADMIN_PASSWORD")
 
-# напоминания для заданий
-# Требование: за 7 дней до дедлайна, за 3 дня и за 24 часа.
+
+
 REMINDER_OFFSETS = [
     ("T-7d", timedelta(days=7)),
     ("T-3d", timedelta(days=3)),
@@ -38,8 +38,8 @@ REMINDER_OFFSETS = [
 
 default_props = DefaultBotProperties(parse_mode='HTML')
 
-# --- генерация кода (Ollama / LangChain) ---
-ENABLE_GEN = True  # можно отключить если не нужно
+
+ENABLE_GEN = True
 try:
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate

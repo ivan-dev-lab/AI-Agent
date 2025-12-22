@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 import re
 from io import BytesIO
 from datetime import datetime
@@ -10,7 +10,6 @@ from aiogram.types import BufferedInputFile
 
 from config import DB_PATH, DEFAULT_TZINFO, DATETIME_FORMAT
 
-# ---------- Formatting / helpers ----------
 
 def fmt_dt_local(dt_utc: datetime, tz: ZoneInfo) -> str:
     return dt_utc.astimezone(tz).strftime(DATETIME_FORMAT)
@@ -64,7 +63,6 @@ def parse_utc_hhmm(s: str) -> datetime:
     """Parse datetime string using the default timezone (UTC+5)."""
     return datetime.strptime(s.strip(), DATETIME_FORMAT).replace(tzinfo=DEFAULT_TZINFO)
 
-# ---------- DB helpers ----------
 
 async def _exists(sql: str, params: tuple) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -86,7 +84,6 @@ async def fetchall(db, sql: str, params=()):
     await cur.close()
     return rows
 
-# ---------- Authorization ----------
 
 AUTH_STATE: dict[int, str] = {}
 
@@ -125,12 +122,11 @@ async def ensure_authorized(user_id: int, target) -> bool:
         else "Вы не зарегистрированы. Введите пароль, чтобы продолжить."
     )
     try:
-        await target.answer(text)          # Message
+        await target.answer(text)          
     except AttributeError:
-        await target.message.answer(text)  # CallbackQuery
+        await target.message.answer(text)  
     return False
 
-# ---------- Role control (strict by users.post) ----------
 
 async def has_post(user_id: int, post: str) -> bool:
     """Проверяет, есть ли у пользователя конкретная должность (post) в users."""
@@ -151,12 +147,11 @@ async def ensure_role(user_id: int, post: str, target) -> bool:
 
     text = f"🚫 Доступ запрещён: требуется роль «{post}»."
     try:
-        await target.answer(text)          # Message
+        await target.answer(text)          
     except AttributeError:
-        await target.message.answer(text)  # CallbackQuery
+        await target.message.answer(text)  
     return False
 
-# ---------- Convenience wrappers for common roles ----------
 
 async def is_local_admin(user_id: int) -> bool:
     """Проверка по БД: users.post = 'local_admin'."""

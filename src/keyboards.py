@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from typing import List, Tuple
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -85,7 +85,7 @@ def student_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🏠 Главное меню",       callback_data=CB_BACK)],
     ])
 
-# список задач со входом в подробности (кнопки-строки + пагинация)
+
 
 def tasks_list_kb(tasks: list, page: int, has_next: bool, start_idx: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
@@ -153,7 +153,7 @@ def student_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="ℹ️ Информация",         callback_data=CB_STU_INFO)],
     ])
 
-# список задач со входом в подробности (кнопки-строки + пагинация)
+
 
 def tasks_list_kb(tasks: list, page: int, has_next: bool, start_idx: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
@@ -177,7 +177,7 @@ def task_detail_kb(back_page: int | None, task_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     if back_page is not None:
         kb.button(text="⬅️ К списку заданий", callback_data=StudentCB(action="tasks", page=back_page).pack())
-    # Добавляем две новые кнопки — нейросеть и учитель
+
     kb.row(
         InlineKeyboardButton(
             text="🤖 Спросить у нейросети",

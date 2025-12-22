@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 """
 Лёгкий клиент для GenAPI (deepseek-v3).
 
@@ -37,27 +37,27 @@ def _extract_content(data) -> Optional[str]:
                         return content.strip()
         return None
 
-    # Верхний уровень: словарь-обёртка (status/result/full_response ...)
+
     if isinstance(data, dict):
-        # 1) Основной результат
+
         if isinstance(data.get("result"), list):
             for item in data["result"]:
                 text = _from_obj(item)
                 if text:
                     return text
-        # 2) Полный результат (дубликат)
+
         if isinstance(data.get("full_response"), list):
             for item in data["full_response"]:
                 text = _from_obj(item)
                 if text:
                     return text
-        # 3) Возможно, это уже объект completion
+
         text = _from_obj(data)
         if text:
             return text
         return None
 
-    # Верхний уровень: список объектов completion
+
     if isinstance(data, list):
         for obj in data:
             text = _from_obj(obj)
@@ -102,17 +102,17 @@ async def call_genapi(
                 raise RuntimeError(f"HTTP {resp.status}: {text}")
             data = await resp.json()
 
-        # Если нужно подождать результата — опрашиваем /requests/<id> (с набором запасных URL)
+
         if poll and isinstance(data, dict) and data.get("status") == "processing" and data.get("request_id"):
             request_id = data["request_id"]
             end_ts = asyncio.get_event_loop().time() + poll_timeout
-            # Первое уведомление
+
             if on_progress:
                 await on_progress(data)
-            # Кандидаты URL для опроса (у разных конфигураций может отличаться маршрут)
-            base_api = "/".join(endpoint.split("/")[:3])  # https://api.gen-api.ru
+
+            base_api = "/".join(endpoint.split("/")[:3])
             poll_urls = [
-                f"{base_api}/api/v1/request/get/{request_id}",  # явный путь из доки
+                f"{base_api}/api/v1/request/get/{request_id}",
                 f"{poll_endpoint.rstrip('/')}/{request_id}",
                 f"{endpoint.rstrip('/')}/requests/{request_id}",
                 f"{endpoint.rstrip('/')}/{request_id}",
@@ -131,7 +131,7 @@ async def call_genapi(
                 url = poll_urls[url_idx % len(poll_urls)]
                 url_idx += 1
                 async with session.get(url, headers=headers) as resp:
-                    # 404/405 на одном маршруте — пробуем другой
+
                     if resp.status in (404, 405):
                         consecutive_404 += 1
                         if consecutive_404 >= len(poll_urls) * 2:
@@ -144,14 +144,14 @@ async def call_genapi(
                     data = await resp.json()
                 if on_progress:
                     await on_progress(data)
-                # status может быть None или "succeeded"/"completed"/"done"
+
                 if isinstance(data, dict) and data.get("status") and data.get("status") != "processing":
                     break
-                # если пришёл массив/dict с choices — считаем готовым
+
                 best_content = _extract_content(data) or best_content
                 if best_content:
                     break
-            # если время вышло, идём дальше и попытаемся извлечь что есть
+
             if best_content:
                 return best_content.strip()
 

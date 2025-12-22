@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import BaseFilter
 
-import aiosqlite                     # ← ДОБАВИТЬ
+import aiosqlite
 
 from utils import ensure_authorized, is_local_admin
 from keyboards import (
@@ -10,7 +10,7 @@ from keyboards import (
     single_col_kb,
 )
 
-from config import DB_PATH           # ← ТОЖЕ ДОБАВИТЬ
+from config import DB_PATH
 
 from handlers.text import USER_STATE
 from callbacks import (
@@ -45,12 +45,12 @@ from db import (
 
 router = Router()
 
-# FSM-состояния для локального администратора
+
 LA_STATE: dict[int, dict] = {}
 
 class HasLaState(BaseFilter):
     async def __call__(self, msg: Message) -> bool:
-        # Обрабатываем текст, только если для этого пользователя есть активное LA_STATE
+
         return msg.from_user.id in LA_STATE
 
 
@@ -62,9 +62,9 @@ def _back_to_core_kb():
     ])
 
 
-# ==========================================================
-#                         ГЛАВНОЕ МЕНЮ
-# ==========================================================
+
+
+
 
 @router.callback_query(F.data == CB_LA_MENU)
 async def cb_la_menu(cq: CallbackQuery):
@@ -98,9 +98,9 @@ async def cb_la_back_to_core(cq: CallbackQuery):
     await cq.message.edit_text(text, reply_markup=la_panel_kb())
 
 
-# ==========================================================
-#                         ОСНОВНЫЕ
-# ==========================================================
+
+
+
 
 @router.callback_query(F.data == CB_LA_SEC_CORE)
 async def cb_la_core(cq: CallbackQuery):
@@ -128,7 +128,7 @@ async def la_assign_teacher_start(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
-    # Получаем id школ, к которым привязан этот локальный администратор
+
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if not school_ids:
         return await cq.message.edit_text(
@@ -136,7 +136,7 @@ async def la_assign_teacher_start(cq: CallbackQuery):
             reply_markup=la_core_kb()
         )
 
-    # Берём все школы и фильтруем только те, что доступны этому ЛА
+
     all_schools = await list_schools()
     schools = [s for s in all_schools if s["id"] in school_ids]
     if not schools:
@@ -163,12 +163,12 @@ async def la_assign_teacher_pick_school(cq: CallbackQuery):
     except Exception:
         return await cq.answer("Некорректные данные", show_alert=True)
 
-    # Проверяем, что эта школа действительно входит в список школ данного ЛА
+
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if school_id not in school_ids:
         return await cq.answer("Эта школа вам недоступна.", show_alert=True)
 
-    # Находим название школы для текста
+
     all_schools = await list_schools()
     school = next((s for s in all_schools if s["id"] == school_id), None)
     school_name = school["name"] if school else f"ID {school_id}"
@@ -197,7 +197,7 @@ async def la_assign_student_start(cq: CallbackQuery):
         return
 
     USER_STATE[cq.from_user.id] = {
-        "mode": "la_assign_student",  # 👈 новый режим, который мы добавили в handlers/text.py
+        "mode": "la_assign_student",
         "step": 0,
         "data": {},
     }
@@ -216,7 +216,7 @@ async def la_assign_pick_class(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
 
-    # callback_data вида "la_assign_pick_cls:<id>"
+
     try:
         class_id = int(cq.data.split(":", 1)[1])
     except Exception:
@@ -231,7 +231,7 @@ async def la_assign_pick_class(cq: CallbackQuery):
     if not display_name:
         return await cq.answer("Не получено имя ученика", show_alert=True)
 
-    # создаём приглашение
+
     try:
         token = await create_pending_student(display_name, class_id, created_by=cq.from_user.id)
     except Exception as e:
@@ -240,14 +240,14 @@ async def la_assign_pick_class(cq: CallbackQuery):
             reply_markup=la_core_kb()
         )
 
-    # название класса
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT name FROM classes WHERE id = ?", (class_id,))
         row = await cur.fetchone()
         class_name = row["name"] if row else f"ID {class_id}"
 
-    # ссылка вида https://t.me/<bot>?start=stu_<token>
+
     bot_info = await cq.bot.get_me()
     bot_username = bot_info.username
     if not bot_username:
@@ -286,7 +286,7 @@ async def la_edit_teachers(cq: CallbackQuery):
             reply_markup=la_core_kb()
         )
 
-    # list_teachers_for_la возвращает dict с ключами UserID и name
+
     rows = [
         (f"{t['name']} (ID {t['UserID']})", f"la_edit_teacher_actions:{t['UserID']}")
         for t in teachers
@@ -365,17 +365,17 @@ async def la_remove_teacher(cq: CallbackQuery):
     except Exception:
         return await cq.answer("Некорректные данные", show_alert=True)
 
-    # Получаем школы, где этот пользователь — ЛА
+
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if not school_ids:
         return await cq.answer("Вы не привязаны ни к одной школе.", show_alert=True)
 
-    # Отвязываем учителя от всех этих школ
+
     for sid in school_ids:
         await remove_teacher_from_school(sid, teacher_id)
 
     await cq.answer("Учитель удалён из ваших школ.")
-    # Обновляем список учителей
+
     await la_edit_teachers(cq)
 
 
@@ -392,7 +392,7 @@ async def la_edit_students(cq: CallbackQuery):
             reply_markup=la_core_kb()
         )
 
-    # list_students_for_la возвращает dict с ключами UserID и name
+
     rows = [
         (f"{s['name']} (ID {s['UserID']})", f"la_edit_student_actions:{s['UserID']}")
         for s in students
@@ -467,24 +467,24 @@ async def la_remove_student(cq: CallbackQuery):
     except Exception:
         return await cq.answer("Некорректные данные", show_alert=True)
 
-    # Получаем школы, где этот пользователь — ЛА
+
     school_ids = await _get_school_ids_for_la(cq.from_user.id)
     if not school_ids:
         return await cq.answer("Вы не привязаны ни к одной школе.", show_alert=True)
 
-    # Отвязываем ученика от всех этих школ
+
     for sid in school_ids:
         await remove_student_from_school(sid, student_id)
 
     await cq.answer("Ученик удалён из ваших школ.")
-    # Обновляем список учеников
+
     await la_edit_students(cq)
 
 
 
-# ==========================================================
-#                      ИНФОРМАЦИОННЫЕ
-# ==========================================================
+
+
+
 
 
 @router.callback_query(F.data == CB_LA_SEC_INFO)
@@ -561,9 +561,9 @@ async def la_list_local_admins(cq: CallbackQuery):
 
  
 
-# ==========================================================
-#        1                 FSM
-# ==========================================================
+
+
+
 async def _handle_la_rename_teacher_step(msg: Message, st: dict):
     """Обработка ввода нового имени учителя от ЛА"""
     new_name = msg.text.strip()
@@ -592,7 +592,7 @@ async def handle_la_text_input(msg: Message):
     if not st:
         return
 
-    # Проверяем, что пользователь авторизован и действительно ЛА
+
     if not await ensure_authorized(msg.from_user.id, msg) or not await is_local_admin(msg.from_user.id):
         LA_STATE.pop(msg.from_user.id, None)
         return
@@ -601,12 +601,12 @@ async def handle_la_text_input(msg: Message):
     raw = msg.text.strip()
 
     try:
-        # 👉 Переименование учителя (без проверки isdigit)
+
         if mode == "la_rename_teacher":
             await _handle_la_rename_teacher_step(msg, st)
             return
 
-        # 👉 Переименование ученика (без проверки isdigit)
+
         if mode == "la_rename_student":
             await _handle_la_rename_student_step(msg, st)
             return
@@ -628,7 +628,7 @@ async def handle_la_text_input(msg: Message):
             )
             return
 
-        # Для остальных режимов ожидаем Telegram ID (только цифры)
+
         if not raw.isdigit():
             return await msg.answer("❌ Введите корректный Telegram ID (только цифры).")
 
@@ -644,9 +644,9 @@ async def handle_la_text_input(msg: Message):
                     reply_markup=la_core_kb()
                 )
 
-            # Создаём/обновляем пользователя с ролью teacher
+
             await ensure_user_with_post(user_id, post="teacher")
-            # Назначаем в выбранную школу
+
             await assign_teacher_to_school(school_id, user_id)
 
             await msg.answer(
@@ -672,5 +672,5 @@ async def handle_la_text_input(msg: Message):
     except Exception as e:
         await msg.answer(f"❌ Ошибка: {e}")
     finally:
-        # В любом случае очищаем состояние
+
         LA_STATE.pop(msg.from_user.id, None)

@@ -1,5 +1,5 @@
-# handlers/text.py
-# -*- coding: utf-8 -*-
+
+
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import aiosqlite
@@ -34,8 +34,8 @@ from callbacks import (
 )
 from handlers.common import show_main_menu
 
-# простой in-memory FSM, как и было в проекте
-USER_STATE = {}   # {user_id: {"mode": str, "step": int, "data": dict, "chat_id": int}}
+
+USER_STATE = {}
 
 router = Router()
 
@@ -75,7 +75,7 @@ def _gen_user_id() -> int:
 
 @router.message(F.text)
 async def on_text(msg: Message):
-    # DEBUG: маяк, чтобы понять, доходит ли вообще сюда управление
+
 
     if get_auth_state(msg.from_user.id) == "await_la_password":
         return await _handle_la_password_input(msg)
@@ -88,7 +88,7 @@ async def on_text(msg: Message):
     step = state.get("step", 0)
     data = state.setdefault("data", {})
 
-    # ---------- ADD CLASS ----------
+
     if mode == "add_class":
         name = msg.text.strip()
         if not name:
@@ -99,26 +99,26 @@ async def on_text(msg: Message):
 
         async with aiosqlite.connect(DB_PATH) as db:
             try:
-                # сохраняем название группы и tg-id создателя
+
                 await db.execute(
                     "INSERT INTO classes(name, owner_chat_id, timezone) VALUES (?, ?, ?)",
                     (name, msg.from_user.id, DEFAULT_TZ)
                 )
                 await db.commit()
             except aiosqlite.IntegrityError:
-                # name, скорее всего, UNIQUE — человекочитабельная ошибка
+
                 return await msg.answer(
                     "❌ Группа с таким названием уже существует. Введите другое имя:",
                     reply_markup=back_kb()
                 )
             except Exception as e:
-                # сюда попадёт и тот самый TypeError, и любые другие проблемы
+
                 return await msg.answer(f"❌ Ошибка создания группы: {e}", reply_markup=back_kb())
 
-        # очищаем состояние мастера
+
         USER_STATE.pop(msg.from_user.id, None)
 
-        # Сообщение пользователю + кнопка возврата в главное меню
+
         return await msg.answer(
             f"✅ Группа успешно создана: <b>{name}</b>",
             reply_markup=back_kb()
@@ -126,10 +126,10 @@ async def on_text(msg: Message):
 
 
 
-    # ---------- ADD STUDENT (теперь users) ----------
+
     if mode == "add_student":
         if step == 0:
-            data["display_name"] = msg.text.strip()  # положим как name (имя/ФИО целиком)
+            data["display_name"] = msg.text.strip()
             state["step"] = 1
             return await msg.answer(
                 "Шаг 2/2: отправьте @username (или оставьте пустым — напишите «-»).\n"
@@ -137,10 +137,10 @@ async def on_text(msg: Message):
                 reply_markup=back_kb()
             )
         elif step == 1:
-            # username больше никуда не сохраняем — в новой схеме его нет
+
             _ = msg.text.strip()
 
-            # users требует UserID и post NOT NULL; остальное можно NULL
+
             new_id = _gen_user_id()
             async with aiosqlite.connect(DB_PATH) as db:
                 try:
@@ -149,7 +149,7 @@ async def on_text(msg: Message):
                         (new_id, data["display_name"], "student")
                     )
                     await db.commit()
-                    # классы для моментального зачисления
+
                     db.row_factory = aiosqlite.Row
                     classes = await fetchall(db, "SELECT id, name FROM classes ORDER BY name COLLATE NOCASE ASC")
                 except Exception as e:
@@ -163,13 +163,13 @@ async def on_text(msg: Message):
                     reply_markup=back_kb()
                 )
 
-    # ---------- LOCAL ADMIN: INVITE STUDENT (имя -> выбор класса) ----------
+
     if mode == "la_assign_student":
         if step == 0:
             data["display_name"] = msg.text.strip()
             state["step"] = 1
 
-            # Показываем список всех классов (как в add_student/t_assign_student)
+
             async with aiosqlite.connect(DB_PATH) as db:
                 db.row_factory = aiosqlite.Row
                 classes = await fetchall(
@@ -190,7 +190,7 @@ async def on_text(msg: Message):
                 reply_markup=single_col_kb(rows)
             )
 
-            # показать список классов + «⏭ Пропустить»
+
             USER_STATE.pop(msg.from_user.id, None)
             rows = [(c["name"], f"{CB_ENROLL_PICK_CLS}{new_id}:{c['id']}") for c in classes]
             rows.append(("⏭ Пропустить", CB_STU_AFTER_ADD_SKIP))
@@ -199,14 +199,14 @@ async def on_text(msg: Message):
                 f"Сразу записать в класс?",
                 reply_markup=single_col_kb(rows)
             )
-        # ---------- TEACHER: ADD STUDENT (имя -> выбор группы) ----------
-        # ---------- TEACHER: ADD STUDENT (имя -> выбор группы) ----------
+
+
     if mode == "t_assign_student":
         if step == 0:
             data["display_name"] = msg.text.strip()
             state["step"] = 1
 
-            # Показать список существующих групп
+
             async with aiosqlite.connect(DB_PATH) as db:
                 db.row_factory = aiosqlite.Row
                 classes = await fetchall(
@@ -226,7 +226,7 @@ async def on_text(msg: Message):
                 "Шаг 2/2: выберите группу, в которую добавить ученика:",
                 reply_markup=single_col_kb(rows)
             )
-            # ---------- TEACHER: EDIT STUDENT FIO ----------
+
     if mode == "t_edit_students_fio":
         new_name = msg.text.strip()
         if not new_name:
@@ -254,7 +254,7 @@ async def on_text(msg: Message):
             f"✅ ФИО обновлено: <b>{new_name}</b>",
             reply_markup=single_col_kb(rows)
         )
-        # ---------- TEACHER: GROUP RENAME ----------
+
     if mode in {"t_edit_task_title", "t_edit_task_desc", "t_edit_task_deadline"}:
         task_id = state.get("task_id")
         class_id = state.get("class_id")
@@ -303,7 +303,7 @@ async def on_text(msg: Message):
                 )
             await db.commit()
 
-            # Определяем, кого уведомлять: таргеты, иначе вся группа
+
             rows = await fetchall(db, "SELECT student_id FROM task_targets WHERE task_id = ?", (task_id,))
             targets = [int(r["student_id"]) for r in rows] if rows else []
             if not targets:
@@ -316,7 +316,7 @@ async def on_text(msg: Message):
         ])
 
         USER_STATE.pop(msg.from_user.id, None)
-        # Уведомляем учащихся об обновлении
+
         if targets:
             try:
                 await send_task_updated_notification(task_id, targets)
@@ -331,7 +331,7 @@ async def on_text(msg: Message):
             rows = [("⬅ Назад к действиям группы", f"{CB_T_GEDIT_BACK_ACTIONS}{class_id}")]
             return await msg.answer("❗️Название группы не может быть пустым. Введите корректное название:", reply_markup=single_col_kb(rows))
 
-        # Переименуем (с проверкой владельца и UNIQUE имени)
+
         async with aiosqlite.connect(DB_PATH) as db:
             try:
                 cur = await db.execute(
@@ -364,9 +364,9 @@ async def on_text(msg: Message):
 
 
 
-    # ---------- REGISTER ----------
+
     if mode == "register":
-        # В новой схеме нет chat_id у пользователей.
+
         USER_STATE.pop(msg.from_user.id, None)
         return await msg.answer(
             "В текущей версии БД привязка чата ученика отключена (в таблице users нет chat_id).\n"
@@ -374,7 +374,7 @@ async def on_text(msg: Message):
             reply_markup=back_kb()
         )
 
-    # ---------- ADD TASK (класс выбран кнопкой) ----------
+
     if mode == "add_task":
         if step == 1:
             data["title"] = msg.text.strip()
@@ -403,7 +403,7 @@ async def on_text(msg: Message):
                 if not class_row:
                     return await msg.answer("Класс не найден (возможно, был удалён).", reply_markup=back_kb())
 
-                # aiosqlite.Row / sqlite3.Row не поддерживает .get(), поэтому берём через []
+
                 tz_name = None
                 try:
                     tz_name = class_row["timezone"] if "timezone" in class_row.keys() else None
@@ -423,15 +423,15 @@ async def on_text(msg: Message):
                 row = await fetchone(db, "SELECT last_insert_rowid() AS id")
                 task_id = row["id"]
 
-                # Определяем получателей и фиксируем их в task_targets:
-                # - scope == 'sel' -> selected_students
-                # - иначе -> все ученики класса (enrollments)
+
+
+
                 scope = state.get("data", {}).get("scope")
                 selected_students = state.get("data", {}).get("selected_students") or []
 
                 if scope == "sel" and selected_students:
                     target_ids = list(map(int, selected_students))
-                    # Индивидуальное назначение: фиксируем явных получателей
+
                     if target_ids:
                         pairs = [(task_id, sid) for sid in target_ids]
                         await db.executemany(
@@ -440,12 +440,12 @@ async def on_text(msg: Message):
                         )
                         await db.commit()
                 else:
-                    # Назначение всей группе: в task_targets не пишем (это "group"-задача),
-                    # но получателей для уведомления берём по enrollments.
+
+
                     enr = await fetchall(db, "SELECT student_id FROM enrollments WHERE class_id = ?", (class_row["id"],))
                     target_ids = [int(r["student_id"]) for r in (enr or [])]
 
-            # Уведомляем учеников о назначении задания (сразу, без планировщика)
+
             try:
                 await send_task_assigned_notification(task_id, target_ids)
             except Exception:
@@ -455,7 +455,7 @@ async def on_text(msg: Message):
             due_local_str = fmt_dt_local(data["due_utc"], tz)
             USER_STATE.pop(msg.from_user.id, None)
 
-            # Дополняем текст в зависимости от охвата
+
             scope = state.get("data", {}).get("scope")
             extra = ""
             if scope == "sel":
@@ -471,7 +471,7 @@ async def on_text(msg: Message):
                 reply_markup=back_kb()
             )           
 
-    # ---------- GEN ----------
+
     if mode == "gen":
         desc = msg.text.strip()
         if not desc:
@@ -480,7 +480,7 @@ async def on_text(msg: Message):
         USER_STATE.pop(msg.from_user.id, None)
         return await _run_generation(msg, desc)
 
-    # fallback
+
     USER_STATE.pop(msg.from_user.id, None)
     from handlers.common import show_main_menu
     await show_main_menu(msg)

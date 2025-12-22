@@ -1,5 +1,5 @@
-# src/handlers/enroll.py
-# -*- coding: utf-8 -*-
+
+
 import aiosqlite
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
@@ -34,12 +34,12 @@ def _title(row) -> str:
 
 @router.callback_query(F.data == CB_ENROLL)
 async def cb_enroll(cq: CallbackQuery):
-    # Берём только студентов; если используете active=1 — раскомментируйте соответствующее условие
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         students = await fetchall(
             db,
-            # добавьте 'AND active = 1' если нужно
+
             "SELECT UserID, name FROM users WHERE post = 'student' ORDER BY name COLLATE NOCASE ASC"
         )
 
@@ -92,7 +92,7 @@ async def cb_enroll_pick_class(cq: CallbackQuery):
         if not s or not c:
             return await cq.answer("Ученик или класс не найден", show_alert=True)
         try:
-            # enrollments.student_id = users.UserID
+
             await db.execute(
                 "INSERT OR IGNORE INTO enrollments(student_id, class_id) VALUES(?, ?)",
                 (student_id, class_id)

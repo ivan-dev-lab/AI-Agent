@@ -1,22 +1,3 @@
-# -*- coding: utf-8 -*-
-"""src/scheduler_jobs.py
-
-Единая логика уведомлений/напоминаний по заданиям.
-
-Требования:
-1) При назначении задания:
-   - если задание назначено группе (классу) — уведомить всех учеников этой группы;
-   - если задание назначено выбранным ученикам — уведомить только их.
-2) Напоминания о дедлайне:
-   - за 7 дней, за 3 дня и за 24 часа до дедлайна.
-3) Рассылка идёт ученикам (в ЛС), chat_id = Telegram user_id.
-
-Технически:
-- Дедлайн хранится в tasks.due_utc (ISO, UTC+5).
-- Получатели хранятся в task_targets (task_id, student_id). На всякий случай есть
-  fallback: если targets пусты — берём учеников по enrollments для класса.
-- Планирование выполняется через APScheduler, состояния job — в таблице jobs.
-"""
 
 from __future__ import annotations
 
@@ -44,17 +25,16 @@ SCHEDULER: AsyncIOScheduler | None = None
 def _class_tz(class_row: aiosqlite.Row | dict | None) -> ZoneInfo:
     tz_name = None
     try:
-        tz_name = (class_row or {}).get("timezone")  # type: ignore[attr-defined]
+        tz_name = (class_row or {}).get("timezone")
     except Exception:
         tz_name = None
     try:
-        return ZoneInfo(tz_name or DEFAULT_TZ or DEFAULT_TZINFO.key)  # type: ignore[arg-type]
+        return ZoneInfo(tz_name or DEFAULT_TZ or DEFAULT_TZINFO.key)
     except Exception:
         return DEFAULT_TZINFO
 
 
 def _remain_text(kind: str) -> str:
-    # kind ожидается из REMINDER_OFFSETS: T-7d, T-3d, T-24h
     if kind == "T-7d":
         return "7 дней"
     if kind == "T-3d":
@@ -89,12 +69,10 @@ async def init_scheduler(bot: Bot, loop: asyncio.AbstractEventLoop | None = None
     if loop is None:
         loop = asyncio.get_running_loop()
     if SCHEDULER is None:
-        # timezone влияет только на интерпретацию naive datetime.
-        # В проекте мы работаем с aware dt для run_date и базовый пояс = UTC+5.
         try:
             tz_for_scheduler = pytz.timezone(DEFAULT_TZ or "Etc/GMT-5")
         except Exception:
-            tz_for_scheduler = pytz.FixedOffset(300)  # +5h
+            tz_for_scheduler = pytz.FixedOffset(300)
         SCHEDULER = AsyncIOScheduler(event_loop=loop, timezone=tz_for_scheduler)
         SCHEDULER.start()
 
@@ -109,7 +87,6 @@ async def _get_target_student_ids(db: aiosqlite.Connection, task_id: int, class_
     if targets:
         return targets
 
-    # fallback: если targets ещё не заполнены (старые данные) — берём всех учеников класса
     rows = await fetchall(db, "SELECT student_id FROM enrollments WHERE class_id = ?", (class_id,))
     return [int(r["student_id"]) for r in rows] if rows else []
 
@@ -157,7 +134,6 @@ async def send_task_assigned_notification(task_id: int, student_ids: list[int] |
         [InlineKeyboardButton(text="⬅️ В главное меню", callback_data=CB_BACK)]
     ])
 
-    # отправляем в ЛС ученикам; ошибки гасим, чтобы не ронять основной поток
     for uid in sorted(set(int(x) for x in (targets or []))):
         try:
             await BOT.send_message(chat_id=uid, text=text, parse_mode=ParseMode.HTML, reply_markup=main_menu_kb)

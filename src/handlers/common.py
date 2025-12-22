@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 from aiogram import Router, F
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery
@@ -21,17 +21,17 @@ from callbacks import CB_STU_MENU
 
 router = Router()
 
-# --- Главное меню в зависимости от роли ---
+
 async def _show_main_for(user_id: int, target: Message | CallbackQuery):
     if not await ensure_authorized(user_id, target):
         return
     
-    # Локальный администратор
+
     if await has_post(user_id, "local_admin"):
         text = "🏫 <b>Панель локального администратора</b>"
         kb = la_panel_kb()
 
-    # Ученик
+
     elif await has_post(user_id, "student"):
         text = (
             "👨‍🎓 <b>Меню ученика</b>\n\n"
@@ -41,14 +41,14 @@ async def _show_main_for(user_id: int, target: Message | CallbackQuery):
         )
         kb = student_menu_kb()
 
-    # Учитель
+
     elif await has_post(user_id, "teacher"):
         text = (
             "👩‍🏫 <b>Меню учителя</b>\n\n"
             "Выберите действие."
         )
         kb = teacher_main_kb()
-    # По умолчанию — общее меню
+
     else:
         text = (
             "Вы не авторизованы"
@@ -74,9 +74,9 @@ async def cb_cancel_activation(cq: CallbackQuery):
 
 @router.message(Command("start"))
 async def cmd_start(msg: Message, command: CommandObject):
-    arg = command.args  # то, что идёт после /start
+    arg = command.args
 
-    # 1) Приглашение ученика по токену stu_xxx
+
     if arg and arg.startswith("stu_"):
         token = arg.split("stu_", 1)[1]
         result = await consume_pending_student(token, msg.from_user.id)
@@ -86,7 +86,7 @@ async def cmd_start(msg: Message, command: CommandObject):
 
         class_id, display_name = result
 
-        # Получим имя класса для сообщения
+
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute("SELECT name FROM classes WHERE id = ?", (class_id,))
@@ -102,7 +102,7 @@ async def cmd_start(msg: Message, command: CommandObject):
         )
         return
 
-    # 2) Приглашение локального администратора по паролю
+
     if arg and not arg.startswith("stu_"):
         school_id = await consume_pending_la(msg.from_user.id, arg)
         if not school_id:
@@ -118,7 +118,7 @@ async def cmd_start(msg: Message, command: CommandObject):
         )
         return
 
-    # Обычный старт — показываем меню по роли
+
     await _show_main_for(msg.from_user.id, msg)
 
 @router.callback_query(F.data == "back_to_main")

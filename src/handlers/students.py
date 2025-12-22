@@ -27,7 +27,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 PAGE_SIZE = 8
 
-# --- Helpers for student task view ---
+
 def _format_task_due(due_iso: str | None, class_tz: str | None) -> str:
     """Форматирует дедлайн задачи в часовом поясе класса."""
     try:
@@ -91,7 +91,7 @@ def _tasks_list_text(tasks: list, page: int) -> str:
 
 
 
-# === GenAPI (deepseek-v3) ===
+
 GENAPI_FALLBACK_TOKEN = "sk-v6FKLfILfda7HreS8zOPZ5Rcp8hcJBeNJnX1QZoiS7H2H5QOta9j9FXFS1nM"
 
 
@@ -176,12 +176,12 @@ def _normalize_ai_answer(raw: str) -> str:
     return extracted if extracted else raw
 
 
-# Состояния для нейросети
+
 class AskAIState(StatesGroup):
     waiting_for_query = State()
     selected_task_id = State()
 
-# Главное меню ученика
+
 @router.message(Command("student"))
 async def student_menu_cmd(msg: Message):
     if not await ensure_role(msg.from_user.id, "student", msg):
@@ -197,11 +197,11 @@ async def student_menu_cb(cq: CallbackQuery):
     await cq.answer()
 
 
-# --- Мои задания (список + вход в подробности через кнопки-строки)
-from callbacks import StudentCB  # для пагинации и возврата
+
+from callbacks import StudentCB
 
 
-# Мои задания с пагинацией
+
 @router.callback_query(F.data == CB_STU_TASKS)
 async def student_tasks_entry(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -251,7 +251,7 @@ async def ask_teacher(callback: CallbackQuery, callback_data: TaskCB):
 
     task_id = callback_data.task_id
     await callback.message.answer(
-        f"🧑‍🏫 Отправляю вопрос учителю по заданию #{task_id}...\n\n"
+        f"🧑‍🏫 Отправляю вопрос учителю по заданию
         "Ожидайте ответа — учитель скоро свяжется с вами."
     )
     await callback.answer()
@@ -268,7 +268,7 @@ async def ask_ai(callback: CallbackQuery, callback_data: TaskCB, state: FSMConte
     await state.set_state(AskAIState.waiting_for_query)
     await callback.answer()
 
-# Обработка ввода пользователя и ответ нейросети (заглушка)
+
 @router.message(AskAIState.waiting_for_query)
 async def process_ai_query(message: Message, state: FSMContext):
     user_data = await state.get_data()
@@ -326,7 +326,7 @@ async def process_ai_query(message: Message, state: FSMContext):
 
     typing_task.cancel()
     ai_answer = _normalize_ai_answer(ai_answer)
-    final_text = f"🤖 Ответ нейросети по заданию #{task_id}:\n\n{ai_answer}"
+    final_text = f"🤖 Ответ нейросети по заданию
     try:
         await status_msg.edit_text(final_text, parse_mode="Markdown")
     except Exception:
@@ -359,8 +359,8 @@ async def student_teachers(cq: CallbackQuery):
     await cq.answer()
 
 
-# --- Мои группы
-# Группы
+
+
 @router.callback_query(F.data == CB_STU_GROUPS)
 async def student_groups(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -381,7 +381,7 @@ async def student_groups(cq: CallbackQuery):
     await cq.answer()
 
 
-# Расписание / напоминания
+
 @router.callback_query(F.data == CB_STU_SCHEDULE)
 async def student_schedule(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):
@@ -406,7 +406,7 @@ async def student_schedule(cq: CallbackQuery):
         [InlineKeyboardButton(text="🔙 В меню ученика", callback_data=CB_STU_MENU)],
     ])
 
-    # защита от "message is not modified": если текст тот же самый, не дергаем edit_text
+
     current_text = cq.message.text or cq.message.html_text
     if current_text == text:
         await cq.answer()
@@ -416,7 +416,7 @@ async def student_schedule(cq: CallbackQuery):
     await cq.answer()
 
 
-# Информация
+
 @router.callback_query(F.data == CB_STU_INFO)
 async def student_info(cq: CallbackQuery):
     if not await ensure_role(cq.from_user.id, "student", cq):

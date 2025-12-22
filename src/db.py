@@ -1,13 +1,13 @@
 import aiosqlite
-import secrets          # ← добавлено
-import string           # ← добавлено
+import secrets
+import string
 
 from typing import Any, Iterable, Optional
 from datetime import datetime
 
 from config import DB_PATH, DEFAULT_TZ, DEFAULT_TZINFO
 
-# ---- базовые утилиты ---------------------------------------------------------
+
 async def fetchone(db, sql: str, params: Iterable[Any] = ()):
     cur = await db.execute(sql, params)
     row = await cur.fetchone()
@@ -20,10 +20,8 @@ async def fetchall(db, sql: str, params: Iterable[Any] = ()):
     await cur.close()
     return rows
 
-# ---- создание БД --------------------------------------------------------------
 async def ensure_db() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        # чтобы строки были dict-like: row["col"]
         db.row_factory = aiosqlite.Row
         default_tz_sql = (DEFAULT_TZ or "Etc/GMT-5").replace("'", "''")
         await db.executescript(
@@ -151,18 +149,15 @@ async def ensure_db() -> None:
             """
         )
 
-        # --- простая миграция схемы (без alembic) -----------------------------
-        # В ранних версиях проекта в `classes` не было колонки timezone.
-        # Многие части кода (список заданий, планировщик) ожидают её.
         cols = await fetchall(db, "PRAGMA table_info(classes)")
         col_names = {c["name"] for c in cols} if cols else set()
         if "timezone" not in col_names:
-            # DDL в SQLite проще делать через format c безопасным экранированием.
+
             tz = (DEFAULT_TZ or "Etc/GMT-5").replace("'", "''")
             await db.execute(
                 f"ALTER TABLE classes ADD COLUMN timezone TEXT NOT NULL DEFAULT '{tz}'"
             )
-        # нормализуем пустые значения
+
         await db.execute(
             "UPDATE classes SET timezone = ? WHERE timezone IS NULL OR timezone = ''",
             (DEFAULT_TZ or "Etc/GMT-5",),
@@ -170,7 +165,7 @@ async def ensure_db() -> None:
 
         await db.commit()
 
-# ---- авторизация/роли ---------------------------------------------------------
+
 async def is_known_user(user_id: int) -> bool:
     """Check whether a user exists in users."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -181,7 +176,7 @@ async def is_known_user(user_id: int) -> bool:
         return r1 is not None
 
 
-# ---- schools helpers -----------------------------------------------------------
+
 async def create_school(
     name: str,
     short_name: Optional[str],
@@ -208,7 +203,7 @@ async def list_schools() -> list:
         rows = await fetchall(db, "SELECT * FROM schools ORDER BY name COLLATE NOCASE ASC")
         return [dict(r) for r in rows]
 
-# === Schools: helpers for reading/updating ===
+
 from typing import Optional
 
 async def get_school_by_id(school_id: int) -> Optional[dict]:
@@ -241,7 +236,7 @@ async def update_school_field(school_id: int, field: str, value) -> None:
             )
         await db.commit()
 
-# --- Локальные администраторы ---
+
 async def assign_local_admin(school_id: int, user_id: int) -> bool:
     """Назначить ЛА. Возвращает True, если успешно (включая дубликат)."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -265,7 +260,7 @@ async def is_user_exists(user_id: int) -> bool:
 import secrets
 import string
 
-# --- Pending Local Admins (для приглашений) ---
+
 async def create_pending_la(user_id: int, school_id: int) -> str:
     """Создаёт запись в pending_local_admins и возвращает пароль."""
     password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
@@ -298,21 +293,21 @@ async def consume_pending_la(user_id: int, password: str) -> Optional[int]:
             return None
 
         school_id = row["school_id"]
-        # Удаляем из pending
+
         await db.execute("DELETE FROM pending_local_admins WHERE user_id = ?", (user_id,))
-        # Добавляем в users (если ещё не добавлен)
+
         await db.execute(
             "INSERT OR IGNORE INTO users(UserID, post, active) VALUES (?, 'local_admin', 1)",
             (user_id,)
         )
-        # Назначаем ЛА
+
         await db.execute(
             "INSERT OR IGNORE INTO school_local_admins(school_id, user_id) VALUES (?, ?)",
             (school_id, user_id)
         )
         await db.commit()
         return school_id
-    # --- Pending Students (приглашения учеников) -------------------------------
+
 
 async def create_pending_student(
     display_name: str,
@@ -358,24 +353,24 @@ async def consume_pending_student(token: str, user_id: int) -> Optional[tuple[in
         display_name = row["display_name"]
         class_id = row["class_id"]
 
-        # создаём/активируем ученика
+
         await db.execute(
             "INSERT OR IGNORE INTO users(UserID, name, post, active) VALUES(?, ?, 'student', 1)",
             (user_id, display_name)
         )
-        # записываем в класс
+
         await db.execute(
             "INSERT OR IGNORE INTO enrollments(student_id, class_id) VALUES(?, ?)",
             (user_id, class_id)
         )
-        # удаляем приглашение
+
         await db.execute("DELETE FROM pending_students WHERE token = ?", (token,))
         await db.commit()
 
     return class_id, display_name
 
     
-# --- ЗАДАНИЯ / КЛАССЫ / ПРЕПОДАВАТЕЛИ ДЛЯ УЧЕНИКА -----------------------------
+
 import aiosqlite
 from typing import List, Tuple, Optional
 
@@ -464,9 +459,9 @@ async def upcoming_tasks_for_student(student_id: int, limit: int = 10) -> list:
             """,
             (student_id, limit)
         )
-    # ----------------- Helpers for Local Admin operations -----------------------  # ← добавлено
 
-# === добавлено блок ===
+
+
 async def _get_school_ids_for_la(la_user_id: int) -> list:
     """Возвращает список id школ, к которым привязан локальный админ."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -554,10 +549,10 @@ async def get_pending_teachers(la_user_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         rows = await fetchall(db, "SELECT user_id, password FROM pending_teachers WHERE la_user_id = ?", (la_user_id,))
         return rows
-# === конец добавленного блока ===1
-# ---------------------------------------------------------------------------
-#            Хелперы для локального администратора (списки)
-# ---------------------------------------------------------------------------
+
+
+
+
 
 async def _get_school_ids_for_la(la_user_id: int) -> list[int]:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -636,7 +631,7 @@ async def list_local_admins_for_la(la_user_id: int) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-# --- Pending Students (инвайты для учеников) ---
+
 import secrets
 import string
 
@@ -681,7 +676,7 @@ async def consume_pending_student(token: str, user_id: int) -> tuple[int, str] |
 
         return (class_id, display_name)
 
-# --- ЗАДАНИЯ / КЛАССЫ / ПРЕПОДАВАТЕЛИ ДЛЯ УЧЕНИКА -----------------------------
+
 import aiosqlite
 from typing import List, Tuple, Optional
 
@@ -948,9 +943,9 @@ async def seed_test_data(
 
         await db.commit()
 
-# ---------------------------------------------------------------------------
-#                 ДОБАВЛЕНО: УТИЛИТЫ ДЛЯ УЧИТЕЛЕЙ/УЧЕНИКОВ (ГА)
-# ---------------------------------------------------------------------------
+
+
+
 
 async def ensure_user_with_post(user_id: int, post: str, name: str | None = None) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
