@@ -61,7 +61,7 @@ async def _handle_la_password_input(msg: Message):
     pop_auth_state(msg.from_user.id)
 
     await msg.answer(
-        "Пароль принят. Вас добавили в БД как local_admin без привязки к университете."
+        "Пароль принят. Вас добавили в БД как локального администратора без привязки к университете."
     )
     await show_main_menu(msg)
 

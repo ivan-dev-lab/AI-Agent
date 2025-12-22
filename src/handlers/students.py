@@ -378,7 +378,7 @@ async def student_schedule(cq: CallbackQuery):
 
     rows = await upcoming_tasks_for_student(cq.from_user.id, limit=10)
     if not rows:
-        text = "📆 Расписание / напоминания\n\nБлижайших дедлайнов нет."
+        text = "📆 Расписание \n\nБлижайших дедлайнов нет."
     else:
         tz = ZoneInfo(DEFAULT_TZ)
         lines = []
@@ -389,7 +389,7 @@ async def student_schedule(cq: CallbackQuery):
                 due_dt = due_dt.replace(tzinfo=DEFAULT_TZINFO)
             due = fmt_dt_local(due_dt, tz)
             lines.append(f"• {r['title']} — {r['class_name']} — {due}")
-        text = "📆 Расписание / напоминания\n\n" + "\n".join(lines)
+        text = "📆 Расписание \n\n" + "\n".join(lines)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 В меню студента", callback_data=CB_STU_MENU)],

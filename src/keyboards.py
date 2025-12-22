@@ -80,7 +80,7 @@ def student_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📋 Мои задания",        callback_data=CB_STU_TASKS)],
         [InlineKeyboardButton(text="👨‍🏫 Мои преподаватели", callback_data=CB_STU_TEACHERS)],
         [InlineKeyboardButton(text="🏫 Мои группы",         callback_data=CB_STU_GROUPS)],
-        [InlineKeyboardButton(text="📆 Расписание / напоминания", callback_data=CB_STU_SCHEDULE)],
+        [InlineKeyboardButton(text="📆 Расписание ", callback_data=CB_STU_SCHEDULE)],
         [InlineKeyboardButton(text="ℹ️ Информация",         callback_data=CB_STU_INFO)],
         [InlineKeyboardButton(text="🏠 Главное меню",       callback_data=CB_BACK)],
     ])
@@ -126,9 +126,7 @@ def la_core_kb() -> InlineKeyboardMarkup:
     rows = [
         ('🏫 Создать университет и назначить себя', CB_LA_CREATE_SCHOOL),
         ('👩‍🏫 Назначить преподавателя', CB_LA_ASSIGN_TEACHER),
-        ('👨‍🎓 Назначить студента', CB_LA_ASSIGN_STUDENT),
         ('✏️ Редактировать преподавателей', CB_LA_EDIT_TEACHERS),
-        ('📚 Редактировать студентов', CB_LA_EDIT_STUDENTS),
         ('↩️ Назад к разделам', CB_LA_BACK_TO_CORE),
     ]
     return single_col_kb(rows)
@@ -149,7 +147,7 @@ def student_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📋 Мои задания",        callback_data=CB_STU_TASKS)],
         [InlineKeyboardButton(text="👨‍🏫 Мои преподаватели", callback_data=CB_STU_TEACHERS)],
         [InlineKeyboardButton(text="🏫 Мои группы",         callback_data=CB_STU_GROUPS)],
-        [InlineKeyboardButton(text="📆 Расписание / напоминания", callback_data=CB_STU_SCHEDULE)],
+        [InlineKeyboardButton(text="📆 Расписание ", callback_data=CB_STU_SCHEDULE)],
         [InlineKeyboardButton(text="ℹ️ Информация",         callback_data=CB_STU_INFO)],
     ])
 

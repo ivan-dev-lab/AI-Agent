@@ -117,7 +117,7 @@ async def la_create_school_start(cq: CallbackQuery):
 
     LA_STATE[cq.from_user.id] = {"mode": "la_create_school"}
     await cq.message.edit_text(
-        "Введите название университета. Мы создадим его и привяжем вас как local_admin.",
+        "Введите название университета. Он будет создан и вы будете привязаны как локальный администратор.",
         reply_markup=back_kb()
     )
 
