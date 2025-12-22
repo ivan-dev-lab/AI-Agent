@@ -180,10 +180,6 @@ def task_detail_kb(back_page: int | None, task_id: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="🤖 Спросить у нейросети",
             callback_data=TaskCB(action="ask_ai", task_id=task_id, page=back_page).pack()
-        ),
-        InlineKeyboardButton(
-            text="✉️ Спросить у учителя",
-            callback_data=TaskCB(action="ask_teacher", task_id=task_id, page=back_page).pack()
         )
     )
     kb.button(text="🏠 Главное меню", callback_data=CB_BACK)
