@@ -244,17 +244,6 @@ async def open_task(callback: CallbackQuery, callback_data: TaskCB):
     )
     await callback.answer()
 
-@router.callback_query(TaskCB.filter(F.action == "ask_teacher"))
-async def ask_teacher(callback: CallbackQuery, callback_data: TaskCB):
-    if not await ensure_role(callback.from_user.id, "student", callback):
-        return
-
-    task_id = callback_data.task_id
-    await callback.message.answer(
-        f"🧑‍🏫 Отправляю вопрос учителю по заданию
-        "Ожидайте ответа — учитель скоро свяжется с вами."
-    )
-    await callback.answer()
 
 @router.callback_query(TaskCB.filter(F.action == "ask_ai"))
 async def ask_ai(callback: CallbackQuery, callback_data: TaskCB, state: FSMContext):
