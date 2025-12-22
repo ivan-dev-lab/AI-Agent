@@ -87,13 +87,14 @@ def student_menu_kb() -> InlineKeyboardMarkup:
 
 # список задач со входом в подробности (кнопки-строки + пагинация)
 
-def tasks_list_kb(tasks: list, page: int, has_next: bool) -> InlineKeyboardMarkup:
+def tasks_list_kb(tasks: list, page: int, has_next: bool, start_idx: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    for row in tasks:
+    for idx, row in enumerate(tasks, start_idx):
         kb.button(
-            text=row["title"][:64],
+            text=str(idx),
             callback_data=TaskCB(action="detail", task_id=row["task_id"], page=page).pack()
         )
+    kb.adjust(2)
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=StudentCB(action="tasks", page=page-1).pack()))
@@ -154,13 +155,14 @@ def student_menu_kb() -> InlineKeyboardMarkup:
 
 # список задач со входом в подробности (кнопки-строки + пагинация)
 
-def tasks_list_kb(tasks: list, page: int, has_next: bool) -> InlineKeyboardMarkup:
+def tasks_list_kb(tasks: list, page: int, has_next: bool, start_idx: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    for row in tasks:
+    for idx, row in enumerate(tasks, start_idx):
         kb.button(
-            text=row["title"][:64],
+            text=str(idx),
             callback_data=TaskCB(action="detail", task_id=row["task_id"], page=page).pack()
         )
+    kb.adjust(3)
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=StudentCB(action="tasks", page=page-1).pack()))
