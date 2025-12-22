@@ -509,6 +509,20 @@ def _format_la_list(title: str, icon: str, rows: list[dict], empty_text: str) ->
     ]
     return f"{header}\nВсего: <b>{len(rows)}</b>\n\n" + "\n".join(lines)
 
+def _format_grouped_list(title: str, icon: str, groups: list[dict], empty_text: str, empty_group_text: str) -> str:
+    header = f"{icon} <b>{title}</b>"
+    if not groups:
+        return f"{header}\n\n{empty_text}"
+    parts = [header]
+    for group in groups:
+        parts.append(f"\n<b>Группа: {group['name']}</b>")
+        if group["items"]:
+            for idx, item in enumerate(group["items"], 1):
+                parts.append(f"{idx}. {item['name']} (ID <code>{item['id']}</code>)")
+        else:
+            parts.append(empty_group_text)
+    return "\n".join(parts)
+
 
 @router.callback_query(F.data == CB_LA_LIST_TEACHERS)
 async def la_list_teachers(cq: CallbackQuery):
@@ -516,12 +530,50 @@ async def la_list_teachers(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
     try:
-        teachers = await list_teachers_for_la(cq.from_user.id)
-        text = _format_la_list(
-            title="Преподаватели",
+        school_ids = await _get_school_ids_for_la(cq.from_user.id)
+        if not school_ids:
+            text = _format_grouped_list(
+                title="Преподаватели по группам",
+                icon="👩‍🏫",
+                groups=[],
+                empty_text="Пока нет доступных университетов.",
+                empty_group_text="— преподаватели не назначены.",
+            )
+            return await cq.message.edit_text(text, reply_markup=_back_to_core_kb())
+
+        placeholders = ",".join("?" * len(school_ids))
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                f"""
+                SELECT DISTINCT
+                    c.id AS class_id,
+                    c.name AS class_name,
+                    u.UserID AS teacher_id,
+                    COALESCE(u.name, 'Без имени') AS teacher_name
+                FROM classes c
+                JOIN school_teachers st ON st.user_id = c.owner_chat_id
+                JOIN users u ON u.UserID = st.user_id
+                WHERE st.school_id IN ({placeholders})
+                ORDER BY c.name COLLATE NOCASE, teacher_name COLLATE NOCASE
+                """,
+                tuple(school_ids),
+            )
+            rows = await cur.fetchall()
+
+        groups_map: dict[str, dict] = {}
+        for row in rows:
+            group_name = row["class_name"]
+            group = groups_map.setdefault(group_name, {"name": group_name, "items": []})
+            group["items"].append({"id": row["teacher_id"], "name": row["teacher_name"]})
+
+        groups = list(groups_map.values())
+        text = _format_grouped_list(
+            title="Преподаватели по группам",
             icon="👩‍🏫",
-            rows=teachers,
-            empty_text="Пока нет преподавателей в ваших университетах.",
+            groups=groups,
+            empty_text="Пока нет групп в ваших университетах.",
+            empty_group_text="— преподаватели не назначены.",
         )
         await cq.message.edit_text(text, reply_markup=_back_to_core_kb())
     except Exception as e:
@@ -534,12 +586,66 @@ async def la_list_students(cq: CallbackQuery):
     if not await ensure_authorized(cq.from_user.id, cq) or not await is_local_admin(cq.from_user.id):
         return
     try:
-        students = await list_students_for_la(cq.from_user.id)
-        text = _format_la_list(
-            title="Студенты",
-            icon="👦",
-            rows=students,
-            empty_text="Пока нет студентов в ваших университетах.",
+        school_ids = await _get_school_ids_for_la(cq.from_user.id)
+        if not school_ids:
+            text = _format_grouped_list(
+                title="Студенты по группам",
+                icon="👨‍🎓",
+                groups=[],
+                empty_text="Пока нет доступных университетов.",
+                empty_group_text="— студентов пока нет.",
+            )
+            return await cq.message.edit_text(text, reply_markup=_back_to_core_kb())
+
+        placeholders = ",".join("?" * len(school_ids))
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                f"""
+                SELECT DISTINCT
+                    c.id AS class_id,
+                    c.name AS class_name
+                FROM classes c
+                JOIN school_teachers st ON st.user_id = c.owner_chat_id
+                WHERE st.school_id IN ({placeholders})
+                ORDER BY c.name COLLATE NOCASE
+                """,
+                tuple(school_ids),
+            )
+            class_rows = await cur.fetchall()
+
+            cur = await db.execute(
+                f"""
+                SELECT
+                    c.id AS class_id,
+                    c.name AS class_name,
+                    u.UserID AS student_id,
+                    COALESCE(u.name, 'Без имени') AS student_name
+                FROM enrollments e
+                JOIN classes c ON c.id = e.class_id
+                JOIN school_teachers st ON st.user_id = c.owner_chat_id
+                JOIN users u ON u.UserID = e.student_id
+                WHERE st.school_id IN ({placeholders})
+                ORDER BY c.name COLLATE NOCASE, student_name COLLATE NOCASE
+                """,
+                tuple(school_ids),
+            )
+            student_rows = await cur.fetchall()
+
+        groups_map = {row["class_id"]: {"name": row["class_name"], "items": []} for row in class_rows}
+        for row in student_rows:
+            group = groups_map.get(row["class_id"])
+            if not group:
+                continue
+            group["items"].append({"id": row["student_id"], "name": row["student_name"]})
+
+        groups = [groups_map[row["class_id"]] for row in class_rows] if class_rows else []
+        text = _format_grouped_list(
+            title="Студенты по группам",
+            icon="👨‍🎓",
+            groups=groups,
+            empty_text="Пока нет групп в ваших университетах.",
+            empty_group_text="— студентов пока нет.",
         )
         await cq.message.edit_text(text, reply_markup=_back_to_core_kb())
     except Exception as e:
