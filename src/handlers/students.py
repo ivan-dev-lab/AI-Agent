@@ -315,7 +315,8 @@ async def process_ai_query(message: Message, state: FSMContext):
 
     typing_task.cancel()
     ai_answer = _normalize_ai_answer(ai_answer)
-    final_text = f"🤖 Ответ нейросети по заданию"
+    answer_body = ai_answer if ai_answer else "Ответ пустой. Попробуйте задать вопрос чуть иначе."
+    final_text = f"🤖 Ответ нейросети по заданию\n\n{answer_body}"
     try:
         await status_msg.edit_text(final_text, parse_mode="Markdown")
     except Exception:
