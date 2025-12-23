@@ -432,13 +432,17 @@ async def list_teachers_for_student(student_id: int) -> list:
         return await fetchall(
             db,
             """
-            SELECT u.UserID AS teacher_id, COALESCE(u.name, 'Без имени') AS name
-            FROM school_students ss
-            JOIN school_teachers st ON st.school_id = ss.school_id
-            JOIN users u            ON u.UserID    = st.user_id
-            WHERE ss.user_id = ?
-            GROUP BY u.UserID, u.name
-            ORDER BY name COLLATE NOCASE
+            SELECT
+                c.id AS class_id,
+                c.name AS class_name,
+                u.UserID AS teacher_id,
+                COALESCE(u.name, 'Без имени') AS teacher_name,
+                c.name || ' - ' || COALESCE(u.name, 'Без имени') AS name
+            FROM enrollments e
+            JOIN classes c ON c.id = e.class_id
+            LEFT JOIN users u ON u.UserID = c.owner_chat_id
+            WHERE e.student_id = ?
+            ORDER BY c.name COLLATE NOCASE
             """,
             (student_id,)
         )
@@ -767,13 +771,17 @@ async def list_teachers_for_student(student_id: int) -> list:
         return await fetchall(
             db,
             """
-            SELECT u.UserID AS teacher_id, COALESCE(u.name, 'Без имени') AS name
-            FROM school_students ss
-            JOIN school_teachers st ON st.school_id = ss.school_id
-            JOIN users u            ON u.UserID    = st.user_id
-            WHERE ss.user_id = ?
-            GROUP BY u.UserID, u.name
-            ORDER BY name COLLATE NOCASE
+            SELECT
+                c.id AS class_id,
+                c.name AS class_name,
+                u.UserID AS teacher_id,
+                COALESCE(u.name, 'Без имени') AS teacher_name,
+                c.name || ' - ' || COALESCE(u.name, 'Без имени') AS name
+            FROM enrollments e
+            JOIN classes c ON c.id = e.class_id
+            LEFT JOIN users u ON u.UserID = c.owner_chat_id
+            WHERE e.student_id = ?
+            ORDER BY c.name COLLATE NOCASE
             """,
             (student_id,)
         )
